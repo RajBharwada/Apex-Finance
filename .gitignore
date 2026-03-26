@@ -1,0 +1,12 @@
+# Python Bytecode Cache (Prevents Linux / Windows binary conflicts)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VS Code Local Workspace Settings
+.vscode/
+
+# SQLite Temporary OS Lock Files (Do not ignore the main .db file for this project)
+*.db-journal
+*.db-shm
+*.db-wal
