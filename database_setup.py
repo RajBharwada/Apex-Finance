@@ -12,7 +12,7 @@ def initialize_database():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS Envelopes (
         envelope_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNQUE NOT NULL,
+        name TEXT UNIQUE NOT NULL,
         allocated_amount REAL DEFAULT 0.0,
         current_balance REAL DEFAULT 0.0
     )
@@ -24,9 +24,9 @@ def initialize_database():
         transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
         envelope_id INTEGER,
         amount REAL NOT NULL,
-        transaction_data DATE NOT NULL,
+        transaction_date DATE NOT NULL,
         note TEXT,
-        FOREIGN KEY (envelope_id) REFERENCES Envelopes(envelpe_id) ON DELETE CASCADE
+        FOREIGN KEY (envelope_id) REFERENCES Envelopes(envelope_id) ON DELETE CASCADE
     )
     ''')
     
