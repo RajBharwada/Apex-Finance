@@ -1,7 +1,10 @@
 import sqlite3
 import pandas as pd
 from pathlib import Path
-from data_models import TransactionModel
+import datetime
+from data_models import TransactionModel, LoanModel, LoanRepaymentModel
+
+sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
 DB_PATH = Path("apex_finance.db")
 
@@ -17,7 +20,7 @@ def save_transaction(transaction: TransactionModel) -> bool:
         cursor.execute('''
             INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
             VALUES (?, ?, ?, ?)
-        ''', (transaction.envelope_id, transaction.amount, transaction.transaction_date, transaction.note))
+        ''', (transaction.envelope_id, transaction.amount, str(transaction.transaction_date), transaction.note))
         
         cursor.execute('''
             UPDATE Envelopes
@@ -25,13 +28,99 @@ def save_transaction(transaction: TransactionModel) -> bool:
             WHERE envelope_id = ?
         ''', (transaction.amount, transaction.envelope_id))
         
+        cursor.execute("SELECT current_balance FROM Envelopes WHERE envelope_id = ?",  (transaction.envelope_id,))
+        new_balance = cursor.fetchone()[0]
+        
+        if new_balance < 0 and transaction.envelope_id != 1:
+            deficit = abs(new_balance)
+            
+            cursor.execute('''
+                UPDATE Envelopes
+                SET current_balance = current_balance - ?
+                WHERE envelope_id = 1
+            ''', (deficit,))
+            
+            cursor.execute('''
+                UPDATE Envelopes
+                SET current_balance = current_balance + ?
+                WHERE envelope_id = ?
+            ''', (deficit, transaction.envelope_id))
+            print(f"System OS: Deficit detected. Auto-transferred ${deficit:.2f} from the Master Pool.")
+        
         conn.commit()
         print(f"System OS: Transaction of ${transaction.amount} securely written to disk")
         return True
         
     except sqlite3.Error as e:
         print(f"System Alert: Database integrity error - {e}")
+        conn.rollback()
+        return False
         
+    finally:
+        conn.close()
+        
+def create_loan(loan: LoanModel) -> bool:
+    """Logs a new Peer-to-Peer debt into the isolated ledger."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO Loans (person_name, principal_amount, remaining_balance, loan_type, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            loan.person_name,
+            loan.principal_amount,
+            loan.principal_amount,
+            loan.loan_type,
+            str(loan.created_at)
+        ))
+        
+        conn.commit()
+        print(f"System OS: IOU secured. {loan.loan_type} ${loan.principal_amount:.2f}, with {loan.person_name}.")
+        return True
+    
+    except sqlite3.Error as e:
+        print(f"System Alert: Loan ledger integrity error - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+        
+def repay_loan(repayment: LoanRepaymentModel) -> bool:
+    """Process a repayment against an existing IOU and mathematically prevents over-pay."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        cursor.execute("SELECT remaining_balance, person_name, loan_type FROM Loans WHERE loan_id = ?", (repayment.loan_id,))
+        result = cursor.fetchone()
+        if not result:
+            raise ValueError(f"Loan ID {repayment.loan_id} does not exist in the database.")
+        
+        current_balance, person_name, loan_type = result
+        
+        if repayment.amount > current_balance:
+            raise ValueError(f"Integrity Error: Repayment of ${repayment.amount:.2f} exceeds {person_name}'s remaining balance of ${current_balance:.2f}.")
+        
+        cursor.execute('''
+            UPDATE Loans
+            SET remaining_balance = remaining_balance - ?
+            WHERE loan_id = ?
+        ''', (repayment.amount, repayment.loan_id))
+        
+        conn.commit()
+        print(f"System OS: Repayment processed. ${repayment.amount:.2f} safely deducted from {person_name}'s ledger.")
+        return True
+    
+    except Exception as e:
+        print(f"System Alert: Repayment failure - {e}")
+        conn.rollback()
+        return False
+    
     finally:
         conn.close()
         
