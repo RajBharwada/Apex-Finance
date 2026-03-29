@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 import datetime
-from data_models import TransactionModel, LoanModel, LoanRepaymentModel
+from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeAllocationModel
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
@@ -124,6 +124,38 @@ def repay_loan(repayment: LoanRepaymentModel) -> bool:
     finally:
         conn.close()
         
+def distribute_income(payload: IncomeAllocationModel) -> bool:
+    """Executes an atomic multi-table write to distribute funds."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        for envelope_id, amount in payload.allocation.items():
+            
+            cursor.execute('''
+                UPDATE Envelopes
+                SET allocated_amount = allocated_amount + ?,
+                    current_balance = current_balance + ?
+                WHERE envelope_id = ?
+            ''', (amount, amount, envelope_id))
+            
+            if cursor.rowcount == 0:
+                raise ValueError(f"Integrity Error: Envelope ID {envelope_id} does not exist.")
+            
+        conn.commit()
+        print(f"System OS: Successfully allocated funds across {len(payload.allocation)} envelopes.")
+        return True
+    
+    except Exception as e:
+        print(f"System Alert: Allocation failed - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
 
 def get_dashboard_envelope_data() -> dict:
     """Reads B-tree state and returns formatting for the UI progress bars."""

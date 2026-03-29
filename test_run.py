@@ -3,34 +3,28 @@ from datetime import date
 from data_models import TransactionModel
 from backend_db import save_transaction, DB_PATH
 from analytical_engine import run_predictive_engine
+from csv_importer import ingest_csv
 
-def seed_envelope_and_spend():
-    print("\n--- Seeding Data for Predictive Engine")
+def test_csv_pipeline():
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Envelopes SET current_balance = 500.00 WHERE envelope_id = 1")
+    success = ingest_csv('bank_statement.csv')
     
-    cursor.execute("INSERT OR IGNORE INTO Envelopes (envelope_id, name, allocated_amount, current_balance) VALUES (3, 'Groceries', 100.0, 100.0)")
-    conn.commit()
-    conn.close()
-    
-    for i in range(3):
-        tx = TransactionModel(
-            envelope_id=3,
-            amount=15.00,
-            transaction_date=date.today(),
-            note=f"Simulated grocery run {i+1}"
-        )
-        save_transaction(tx)
+    if success:
+        print("\n--- Disk Verification ---")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
         
-def test_prediction():
-    print("\n--- Firing Pandas Engine ---")
-    result = run_predictive_engine(3)
-    print(result)
-
+        cursor.execute("SELECT current_balance FROM Envelopes WHERE envelope_id = 1")
+        master_balance = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM Transactions")
+        tx_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        print(f"Total Transactions Logged: {tx_count}")
+        print(f"Master Pool Balance: ${master_balance:.2f}")
 
         
 if __name__ == "__main__":
-    seed_envelope_and_spend()
-    test_prediction()
+    test_csv_pipeline()
