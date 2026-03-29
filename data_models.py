@@ -52,3 +52,8 @@ class IncomeAllocationModel(BaseModel):
             value[env_id] = round(amount, 2)
             
         return value
+    
+class TaskModel(BaseModel):
+    description: str = Field(min_length=1, max_length=255, description="Task cannot be empty")
+    due_date: Optional[date] = None
+    is_completed: bool = False

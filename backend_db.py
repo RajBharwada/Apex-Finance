@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 import datetime
-from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeAllocationModel
+from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeAllocationModel, TaskModel
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
@@ -151,6 +151,56 @@ def distribute_income(payload: IncomeAllocationModel) -> bool:
     
     except Exception as e:
         print(f"System Alert: Allocation failed - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+
+def create_task(task: TaskModel) -> bool:
+    """Logs a new actionable financial task into the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO Tasks (description, due_date)
+            VALUES (?, ?)
+        ''', (task.description, str(task.due_date) if task.due_date else None))
+        
+        conn.commit()
+        print(f"System OS: Task secured -> '{task.description}'")
+        return True
+    
+    except sqlite3.Error as e:
+        print(f"System Alert: Task write failure - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+        
+def complete_task(task_id: int) -> bool:
+    """Flips the binary state of a task to True (1)."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE Tasks
+            SET is_completed = 1
+            WHERE task_id = ?
+        ''', (task_id,))
+        
+        if cursor.rowcount == 0:
+            raise ValueError(f"Task ID {task_id} does not exist.")
+        
+        conn.commit()
+        print(f"System OS: Task ID {task_id} marked as COMPLETE.")
+        return True
+    
+    except Exception as e:
+        print(f"System Alert: Task update failure - {e}")
         conn.rollback()
         return False
     

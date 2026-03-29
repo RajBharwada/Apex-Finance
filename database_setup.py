@@ -55,6 +55,16 @@ def initialize_database():
     )
     ''')
     
+    # Table 4 : Financial Task Tracker
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Tasks (
+        task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        description TEXT NOT NULL,
+        due_date DATE,
+        is_completed INTEGER DEFAULT 0
+    )
+    ''')
+    
     seed_system_envelopes(cursor)
     
     conn.commit()
