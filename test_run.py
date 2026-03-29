@@ -1,34 +1,36 @@
 import sqlite3
 from datetime import date
-from data_models import LoanRepaymentModel
-from backend_db import repay_loan, DB_PATH
+from data_models import TransactionModel
+from backend_db import save_transaction, DB_PATH
+from analytical_engine import run_predictive_engine
 
-def test_iou_repayment():
-    print("\n--- Initiating IOU Ledger ---")
+def seed_envelope_and_spend():
+    print("\n--- Seeding Data for Predictive Engine")
     
-    try:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Envelopes SET current_balance = 500.00 WHERE envelope_id = 1")
+    
+    cursor.execute("INSERT OR IGNORE INTO Envelopes (envelope_id, name, allocated_amount, current_balance) VALUES (3, 'Groceries', 100.0, 100.0)")
+    conn.commit()
+    conn.close()
+    
+    for i in range(3):
+        tx = TransactionModel(
+            envelope_id=3,
+            amount=15.00,
+            transaction_date=date.today(),
+            note=f"Simulated grocery run {i+1}"
+        )
+        save_transaction(tx)
         
-        repayment = LoanRepaymentModel(loan_id=1, amount=50.0)
-        print("Pydantic Validation: Repayment payload seured.")
-        
-        success = repay_loan(repayment)
-        
-        if success:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT remaining_balance FROM Loans WHERE loan_id = 1")
-            new_balance = cursor.fetchone()[0]
-            conn.close()
-            
-            print(f"--- Disk Verification ---")
-            print(f"New Remaining Balance: ${new_balance:.2f} (Expected: $100.0)")
-            
-            if new_balance == 100:
-                print("Status: 100% Repayment Math Verified. The ledger is perfectly balanced.")
-                
-    except Exception as e:
-        print(f"System Failure: {e}")
+def test_prediction():
+    print("\n--- Firing Pandas Engine ---")
+    result = run_predictive_engine(3)
+    print(result)
+
+
         
 if __name__ == "__main__":
-    test_iou_repayment()
+    seed_envelope_and_spend()
+    test_prediction()
