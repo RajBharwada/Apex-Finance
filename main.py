@@ -1,4 +1,8 @@
 import customtkinter as ctk
+import sqlite3
+from datetime import date
+from backend_db import DB_PATH, save_transaction, distribute_income
+from data_models import TransactionModel, IncomeAllocationModel
 
 # UI Config
 ctk.set_appearance_mode("Dark")
@@ -37,16 +41,150 @@ class ApexFinanceApp(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=10)
         self.main_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
         
-        # Placeholder text for the main frame
-        self.header = ctk.CTkLabel(self.main_frame, text="System Online. Awaiting Database Connection.", font=ctk.CTkFont(size=18))
-        self.header.pack(pady=50)
+        # Initialize the dashboard by default on boot
+        self.open_dashboard()
         
-    # UI Routing method
+    # --- UI Routing Methods ---
+    
+    def clear_main_frame(self):
+        """System Protocol: Purges all active widgets from the main frame memory."""
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+    
     def open_dashboard(self):
-        self.header.configure(text="Dashboard Routing Active...")
+        """Constructs the primary financial telementry screen and input matrix."""
+        self.clear_main_frame()
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT current_balance FROM Envelopes WHERE envelope_id = 1")
+            result = cursor.fetchone()
+            # If DB is empty, default to 0.00
+            master_balance = result[0] if result else 0.00
+            
+            cursor.execute("SELECT envelope_id, name FROM Envelopes")
+            envelopes = cursor.fetchall()
+            
+            # Translating users choice into integer ID
+            self.env_mapping = {name: env_id for env_id, name in envelopes}
+            env_names = list(self.env_mapping.keys())
+            
+        except sqlite3.Error:
+            master_balance = 0.00
+            self.env_mapping = {"Master Pool": 1}
+            env_names = ["Master Pool"]
+            
+        finally:
+            conn.close()
+            
+        # UI - Header
+        title = ctk.CTkLabel(self.main_frame, text="Command Center", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(pady=(30,10), anchor="w", padx=40)
+        
+        # UI - Master Pool
+        balance_card = ctk.CTkFrame(self.main_frame, fg_color="#1e1e1e", corner_radius=15)
+        balance_card.pack(pady=20, padx=40, fill="x")
+        
+        lbl_pool = ctk.CTkLabel(balance_card, text="MASTER POOL BALANCE", font=ctk.CTkFont(size=12), text_color="#6b7280")
+        lbl_pool.pack(pady=(20, 0))
+        
+        # Formatting float
+        lbl_balance = ctk.CTkLabel(balance_card, text=f"${master_balance:.2f}", font=ctk.CTkFont(size=56, weight="bold"), text_color="#00ffcc")
+        lbl_balance.pack(pady=(0, 20))
+        
+        # --- Transaction Module ---
+        form_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        form_frame.pack(pady=10, padx= 40, fill="x")
+        
+        form_title = ctk.CTkLabel(form_frame, text="LOG TRANSACTION", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
+        form_title.pack(anchor="w", pady=(0, 10))
+        
+        # Input Grid
+        input_grid = ctk.CTkFrame(form_frame, fg_color="transparent")
+        input_grid.pack(fill="x", pady=5)
+        
+        # --- Transaction Type Toggle ---
+        self.tx_type_var = ctk.StringVar(value="Expense")
+        self.type_toggle = ctk.CTkSegmentedButton(
+            input_grid, 
+            values=["Expense", "Income"],
+            variable=self.tx_type_var,
+            selected_color="#00ffcc",
+            selected_hover_color="#00ccaa",
+            unselected_color="#333333",
+            text_color="black",
+        )
+        self.type_toggle.pack(side="left", padx=(0, 10), fill="x")
+        
+        # Envelope Dropdown
+        self.env_var = ctk.StringVar(value=env_names[0])
+        self.dropdown = ctk.CTkOptionMenu(input_grid, variable=self.env_var, values=env_names, fg_color="#333333", button_color="#444444")
+        self.dropdown.pack(side="left", padx=(0, 10), expand=True, fill="x")
+        
+        # Amount Entry
+        self.amount_entry = ctk.CTkEntry(input_grid, placeholder_text="Amount (e.g. 15.00)", width=120)
+        self.amount_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
+        
+        # Note Entry
+        self.note_entry = ctk.CTkEntry(input_grid, placeholder_text="Transaction Note...", width=200)
+        self.note_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
+        
+        # Submit Button
+        self.btn_submit = ctk.CTkButton(input_grid, text="Execute", fg_color="#00ffcc", text_color="black", hover_color="#00ccaa", font=ctk.CTkFont(weight="bold"), command=self.process_transaction)
+        self.btn_submit.pack(side="left", fill="x")
+        
+        # Status Label (For error/ success messages)
+        self.status_lbl = ctk.CTkLabel(form_frame, text="", font=ctk.CTkFont(size=12))
+        self.status_lbl.pack(anchor="w", pady=10)
+        
+    def process_transaction(self):
+        """Execute UI string, translate types, and pushes to the backend database."""
+        raw_amt = self.amount_entry.get()
+        note_txt = self.note_entry.get()
+        selected_env_name = self.env_var.get()
+        tx_type = self.tx_type_var.get()
+        
+        try:
+            amt_float = float(raw_amt)
+            env_id = self.env_mapping[selected_env_name]
+            
+            if tx_type == "Expense":
+                tx = TransactionModel(
+                    envelope_id=env_id,
+                    amount=amt_float,
+                    transaction_date=date.today(),
+                    note=note_txt
+                )
+                success = save_transaction(tx)
+                
+            elif tx_type == "Income":
+                payload = IncomeAllocationModel(allocation={env_id: amt_float})
+                success = distribute_income(payload)
+                
+                if success and note_txt:
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
+                        VALUES (?, ?, ?, ?)
+                    ''', (env_id, amt_float, str(date.today()), f"INCOME: {note_txt}"))
+                    conn.commit()
+                    conn.close
+            
+            if success:
+                self.open_dashboard()
+            else:
+                self.status_lbl.configure(text="System Alert: Backend write failed.", text_color="red")
+                
+        except ValueError:
+            self.status_lbl.configure(text="System Alert: Amount must be a valid number.", text_color="red")
         
     def open_tasks(self):
-        self.header.configure(text="Task Tracker Routing Active...")
+        self.clear_main_frame()
+        header = ctk.CTkLabel(self.main_frame, text="Task Tracker (Awaiting Data Linking...)", font=ctk.CTkFont(size=18))
+        header.pack(pady=50)
         
 if __name__ == "__main__":
     app = ApexFinanceApp()
