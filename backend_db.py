@@ -243,4 +243,73 @@ def get_pie_chart_data() -> dict:
         return aggregated.to_dict()
     finally:
         conn.close()
+
+def get_recent_transactions(limit: int = 50) -> list:
+    """System Protocol: Pulls the 50 most recent transactions with relational JOIN."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT t.transaction_id, t.transaction_date, e.name, t.amount, t.note
+            FROM Transactions t
+            JOIN Envelopes e ON t.envelope_id = e.envelope_id
+            ORDER BY t.transaction_date DESC, t.transaction_id DESC
+            LIMIT ?
+        ''', (limit,))
+        return cursor.fetchall()
+    
+    except sqlite3.Error as e:
+        print(f"System Alert: Ledger query failed - {e}")
+        return []
+    
+    finally:
+        conn.close()
+    
+def delete_transaction(transaction_id: int) -> bool:
+    """Executes an Atomic Mathematical Refund and hard-deletes the paper trail."""    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA foreign_keys = ON;")
         
+        cursor.execute("SELECT envelope_id, amount, note FROM Transactions WHERE transaction_id = ?", (transaction_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            raise ValueError(f"Integrity Error: Transaction ID {transaction_id} does not exist.")
+        
+        env_id, amount, note = result
+        
+        is_income = note.startswith("INCOME:") or note.startswith("CSV INCOME:")
+        
+        if is_income:
+            cursor.execute('''
+                UPDATE Envelopes
+                SET current_balance = currenct_balance - ?,
+                    allocated_amount = allocated_amount - ?
+                WHERE envelope_id = ?
+            ''', (amount, env_id))
+            
+        else:
+            cursor.execute('''
+                UPDATE Envelopes
+                SET current_balance = current_balance + ?
+                WHERE envelope_id = ?
+            ''', (amount, env_id))
+            
+        cursor.execute("DELETE FROM Transactions WHERE transaction_id = ?", (transaction_id,))
+        
+        conn.commit()
+        print(f"System OS: Transaction {transaction_id} purged. ${amount} refunded successfully.")
+        return True
+    
+    except Exception as e:
+        print(f"System Alert: Atomic deletion failed - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+    

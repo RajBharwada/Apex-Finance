@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import sqlite3
 from datetime import date
-from backend_db import DB_PATH, save_transaction, distribute_income
+from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction
 from data_models import TransactionModel, IncomeAllocationModel
 
 # UI Config
@@ -139,6 +139,48 @@ class ApexFinanceApp(ctk.CTk):
         self.status_lbl = ctk.CTkLabel(form_frame, text="", font=ctk.CTkFont(size=12))
         self.status_lbl.pack(anchor="w", pady=10)
         
+        # Live Ledger UI
+        
+        ledger_title = ctk.CTkLabel(self.main_frame, text="TRANSACTION TAPE", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
+        ledger_title.pack(anchor="w", padx=40, pady=(10, 0))
+        
+        self.ledger_frame = ctk.CTkScrollableFrame(self.main_frame, fg_color="#1e1e1e", corner_radius=10, height=200)
+        self.ledger_frame.pack(pady=10, padx=40, fill="both", expand=True)
+        
+        transactions = get_recent_transactions()
+        
+        if not transactions:
+            empty_lbl = ctk.CTkLabel(self.ledger_frame, text="No transactions logged yet.", text_color="gray")
+            empty_lbl.pack(pady=20)
+            
+        else:
+            for tx in transactions:
+                tx_id, tx_date, env_name, amount, note = tx
+                
+                is_income = note.startswith("INCOME:") or note.startswith("CSV INCOME:")
+                amt_color = "#00ffcc" if is_income else "#ff4444"
+                prefix = "+" if is_income else "-"
+                
+                row = ctk.CTkFrame(self.ledger_frame, fg_color="transparent")
+                row.pack(fill="x", pady=5)
+                
+                lbl_date = ctk.CTkLabel(row, text=tx_date, width=90, anchor="w", text_color="#a3a3a3")
+                lbl_date.pack(side="left", padx=(10, 5))
+                
+                lbl_env = ctk.CTkLabel(row, text=env_name, width=120, anchor="w", font=ctk.CTkFont(weight="bold"))
+                lbl_env.pack(side="left", padx=5)
+                
+                lbl_amt = ctk.CTkLabel(row, text=f"{prefix}${amount:,.2f}", width=90, anchor="e", text_color=amt_color, font=ctk.CTkFont(weight="bold"))
+                lbl_amt.pack(side="left", padx=5)
+                
+                lbl_note = ctk.CTkLabel(row, text=note, width=200, anchor="w", text_color="#6b7280")
+                lbl_note.pack(side="left", padx=10, expand=True, fill="x")
+                
+                # The kill switch [X]
+                btn_del = ctk.CTkButton(row, text="X", width=30, fg_color="#333333", hover_color="#ff4444", text_color="white", command=lambda t_id=tx_id: self.execute_delete(t_id))
+                btn_del.pack(side="right", padx=(5, 10))
+                
+        
     def process_transaction(self):
         """Execute UI string, translate types, and pushes to the backend database."""
         raw_amt = self.amount_entry.get()
@@ -180,6 +222,14 @@ class ApexFinanceApp(ctk.CTk):
                 
         except ValueError:
             self.status_lbl.configure(text="System Alert: Amount must be a valid number.", text_color="red")
+    
+    def execute_delete(self, tx_id):
+        """Bridge command to trigger the Database and reboot the UI."""
+        if delete_transaction(tx_id):
+            self.open_dashboard()
+            
+        else:
+            self.status_lbl.configure(text=f"System Alert: Fialed to delete TX {tx_id}", text_color="red")
         
     def open_tasks(self):
         self.clear_main_frame()
