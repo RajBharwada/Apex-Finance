@@ -312,4 +312,25 @@ def delete_transaction(transaction_id: int) -> bool:
     
     finally:
         conn.close()
+        
+def get_active_tasks() -> list:
+    """System Protocol: Pulls all incomplete tasks (Binary 0) from the B-tree."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT task_id, description, due_date
+            FROM Tasks
+            WHERE is_completed = 0
+            ORDER BY task_id DESC
+        ''')
+        return cursor.fetchall()
+    
+    except sqlite3.Error as e:
+        print(f"System Alert: Task query failed - {e}")
+        return []
+    
+    finally:
+        conn.close()
     

@@ -1,8 +1,8 @@
 import customtkinter as ctk
 import sqlite3
 from datetime import date
-from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction
-from data_models import TransactionModel, IncomeAllocationModel
+from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks
+from data_models import TransactionModel, IncomeAllocationModel, TaskModel
 
 # UI Config
 ctk.set_appearance_mode("Dark")
@@ -232,9 +232,74 @@ class ApexFinanceApp(ctk.CTk):
             self.status_lbl.configure(text=f"System Alert: Fialed to delete TX {tx_id}", text_color="red")
         
     def open_tasks(self):
+        """Constructs the Task Tracker visual matrix."""
         self.clear_main_frame()
-        header = ctk.CTkLabel(self.main_frame, text="Task Tracker (Awaiting Data Linking...)", font=ctk.CTkFont(size=18))
-        header.pack(pady=50)
+        
+        title = ctk.CTkLabel(self.main_frame, text="Active Objectives", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(pady=(30, 10), anchor="w", padx=40)
+        
+        input_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        input_frame.pack(pady=10, padx=40, fill="x")
+        
+        self.task_entry = ctk.CTkEntry(input_frame, placeholder_text="Enter new objective...", width=300)
+        self.task_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
+        
+        btn_add_task = ctk.CTkButton(input_frame, text="Add Task", fg_color="#00ffcc", text_color="black", hover_color="#00ccaa", font=ctk.CTkFont(weight="bold"), command=self.execute_add_task)
+        btn_add_task.pack(side="left")
+        
+        self.task_status_label = ctk.CTkLabel(self.main_frame, text="", font=ctk.CTkFont(size=12))
+        self.task_status_label.pack(anchor="w", padx=40)
+        
+        self.task_frame = ctk.CTkScrollableFrame(self.main_frame, fg_color="#1e1e1e", corner_radius=10)
+        self.task_frame.pack(pady=10, padx=40, fill="both", expand=True)
+        
+        tasks = get_active_tasks()
+        
+        if not tasks:
+            empty_lbl = ctk.CTkLabel(self.task_frame, text="All objective complete. System nominal.", text_color="#6b7280")
+            empty_lbl.pack(pady=20)
+        else:
+            for t in tasks:
+                t_id, desc, due = t
+                
+                row = ctk.CTkFrame(self.task_frame, fg_color="transparent")
+                row.pack(fill="x", pady=5)
+                
+                # Binary Checkbox
+                chk = ctk.CTkCheckBox(
+                    row,
+                    text=desc,
+                    font=ctk.CTkFont(size=14),
+                    text_color="#a3a3a3",
+                    hover_color="#00ffcc",
+                    command=lambda id=t_id: self.execute_complete_task(id)
+                )
+                chk.pack(side="left", padx=10, pady=5)
+                
+# --- Task Tracker Execution Bridges ---
+
+    def execute_add_task(self):
+        """Bridge to translate UI text and inject a new task into the B-tree."""
+        desc = self.task_entry.get()
+        if not desc:
+            self.task_status_label.configure(text="System Alert: Task desription required.", text_color="red")
+            return
+        
+        try:
+            new_task = TaskModel(description=desc)
+            
+            if create_task(new_task):
+                self.open_tasks()
+            else:
+                self.task_status_label.configure(text="System Alert: Backend write failed.", text_color="red")
+        
+        except ValueError as e:
+            self.task_status_label.configure(text=f"Validation Error: {e}", text_color="red")
+            
+    def execute_complete_task(self, task_id):
+        """Bridge to flip the binary state to True (1) and purge from the active UI."""
+        if complete_task(task_id):
+            self.open_tasks()
         
 if __name__ == "__main__":
     app = ApexFinanceApp()
