@@ -39,9 +39,9 @@ class LoanRepaymentModel(BaseModel):
     
 class IncomeAllocationModel(BaseModel):
     
-    allocation: Dict[int, float]
+    allocations: Dict[int, float]
     
-    @field_validator('allocation')
+    @field_validator('allocations')
     @classmethod
     def validate_positive_distribution(cls, value: Dict[int, float]) -> Dict[int, float]:
         """System Protocol: Prevents negative fund allocation."""

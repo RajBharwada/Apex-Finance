@@ -133,7 +133,7 @@ def distribute_income(payload: IncomeAllocationModel) -> bool:
         
         cursor.execute("PRAGMA foreign_keys = ON;")
         
-        for envelope_id, amount in payload.allocation.items():
+        for envelope_id, amount in payload.allocations.items():
             
             cursor.execute('''
                 UPDATE Envelopes
@@ -146,7 +146,7 @@ def distribute_income(payload: IncomeAllocationModel) -> bool:
                 raise ValueError(f"Integrity Error: Envelope ID {envelope_id} does not exist.")
             
         conn.commit()
-        print(f"System OS: Successfully allocated funds across {len(payload.allocation)} envelopes.")
+        print(f"System OS: Successfully allocated funds across {len(payload.allocations)} envelopes.")
         return True
     
     except Exception as e:
@@ -333,4 +333,120 @@ def get_active_tasks() -> list:
     
     finally:
         conn.close()
+
+def seed_default_categories():
+    """System Protocol: Injects baseline categories if they do not exists."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    defaults = ["Food", "Travelling", "Entertainment"]
     
+    try:
+        for name in defaults:
+            cursor.execute('''
+                INSERT OR IGNORE INTO Envelopes (name, allocated_amount, current_balance)
+                VALUES (?, 0.0, 0.0)
+            ''', (name,))
+        conn.commit()
+    
+    except sqlite3.Error as e:
+        print(f"System Alert: Default seeding failed - {e}")
+        
+    finally:
+        conn.close()
+        
+def add_custom_envelope(name: str) -> bool:
+    """System Protocol: Allocates a new custom envelope in the B-tree."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            INSERT INTO Envelopes (name, allocated_amount, current_balance)
+            VALUES (?, 0.0, 0.0)
+        ''', (name.strip(),))
+        conn.commit()
+        return True
+    
+    except sqlite3.IntegrityError:
+        return False
+    
+    finally:
+        conn.close()
+
+def delete_custom_envelope(env_id: int, env_name: str) -> bool:
+    """System Protocol: Bulletproof Merge & Purge. Refunds all columns dynamically."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT envelope_id FROM Envelopes WHERE name = 'Master Pool'")
+        master_result = cursor.fetchone()
+        if not master_result:
+            raise ValueError("Fatal Error: Master Pool missing from database.")
+        master_id = master_result[0]
+
+        if env_id == master_id:
+            print("System Alert: Core system envelope cannot be deleted.")
+            return False
+
+        cursor.execute("SELECT current_balance, allocated_amount FROM Envelopes WHERE envelope_id = ?", (env_id,))
+        result = cursor.fetchone()
+        if not result:
+            raise ValueError("Integrity Error: Envelope does not exist.")
+            
+        curr_bal = result[0] or 0.0
+        alloc_amt = result[1] or 0.0
+        print(f"System OS: Intercepted '{env_name}' -> Balance: ${curr_bal} | Allocated: ${alloc_amt}")
+
+        cursor.execute('''
+            UPDATE Envelopes 
+            SET current_balance = current_balance + ?,
+                allocated_amount = allocated_amount + ?
+            WHERE envelope_id = ?
+        ''', (curr_bal, alloc_amt, master_id))
+
+        archive_note = f" [Archived from: {env_name}]"
+        cursor.execute('''
+            UPDATE Transactions 
+            SET envelope_id = ?, note = note || ?
+            WHERE envelope_id = ?
+        ''', (master_id, archive_note, env_id))
+        
+        cursor.execute("DELETE FROM Envelopes WHERE envelope_id = ?", (env_id,))
+        
+        conn.commit()
+        print(f"System OS: Purge complete. Refunded to Master Pool (ID {master_id}).")
+        return True
+        
+    except Exception as e:
+        print(f"System Alert: Merge & Purge failed - {e}")
+        conn.rollback() 
+        return False
+        
+    finally:
+        conn.close()
+
+def execute_factory_reset() -> bool:
+    """System Protocol: Drops all tables to wipe memory, then rebuilds fatory schema.""" 
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("DROP TABLE IF EXIXTS Transactions")
+        cursor.execute("DROP TABLE IF EXIXTS Envelopes")
+        cursor.execute("DROP TABLE IF EXIXTS Tasks")
+        conn.commit()
+        
+        init_db()
+        seed_default_categories()
+        print("System OS: Factory reset completed. Matrix reinitialized.")
+        return True
+    
+    except Exception as e:
+        print(f"System Alert: Factory reset failed - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+        
