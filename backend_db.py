@@ -225,23 +225,59 @@ def get_dashboard_envelope_data() -> dict:
         conn.close()
         
 def get_pie_chart_data() -> dict:
-    """Aggregates transactional math for Matplotlib vetor graphics."""
+    """Aggregates transactional math strictly for the CURRENT CALENDAR MONTH."""
     conn = sqlite3.connect(DB_PATH)
     try:
+        # strftime('%Y-%m') ensures it only pulls data for the current month and year
         query = '''
             SELECT e.name as category, t.amount
             FROM Transactions t
             INNER JOIN Envelopes e ON t.envelope_id = e.envelope_id
+            WHERE e.envelope_id != 1 
+            AND t.note NOT LIKE 'SYSTEM:%'
+            AND t.note NOT LIKE 'INCOME:%'
+            AND strftime('%Y-%m', t.transaction_date) = strftime('%Y-%m', 'now')
         '''
         
         df = pd.read_sql_query(query, conn)
-        
         if df.empty:
-            return{}
-        
+            return {}
+            
         aggregated = df.groupby('category')['amount'].sum()
-        
         return aggregated.to_dict()
+    finally:
+        conn.close()
+
+def get_bar_chart_data() -> dict:
+    """Aggregates monthly burn rates for the CURRENT YEAR, pre-loading all 12 months."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        # Sums up the totals grouped by the exact month of the current year
+        query = '''
+            SELECT strftime('%m', transaction_date) as month, SUM(amount) as total
+            FROM Transactions
+            WHERE envelope_id != 1 
+            AND note NOT LIKE 'SYSTEM:%'
+            AND note NOT LIKE 'INCOME:%'
+            AND strftime('%Y', transaction_date) = strftime('%Y', 'now')
+            GROUP BY month
+        '''
+        df = pd.read_sql_query(query, conn)
+        
+        # Pre-fill all 12 months with $0 so the graph always displays the full year cleanly
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        result = {m: 0.0 for m in months}
+        
+        # Map SQLite's output ('04') to our labels ('Apr') and inject the real data
+        month_map = {'01':'Jan', '02':'Feb', '03':'Mar', '04':'Apr', '05':'May', '06':'Jun', 
+                     '07':'Jul', '08':'Aug', '09':'Sep', '10':'Oct', '11':'Nov', '12':'Dec'}
+                     
+        for _, row in df.iterrows():
+            label = month_map.get(row['month'])
+            if label:
+                result[label] = row['total']
+                
+        return result
     finally:
         conn.close()
 
@@ -572,3 +608,23 @@ def add_income_to_master(amount: float, note: str) -> bool:
         return False
     finally:
         conn.close()
+        
+def get_active_loans() -> list:
+    """System Protocol: Pulls all unresolved P2P debts from the ledger."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # We only pull loans that haven't been fully paid off (remaining > 0)
+        cursor.execute('''
+            SELECT loan_id, person_name, principal_amount, remaining_balance, loan_type
+            FROM Loans
+            WHERE remaining_balance > 0
+            ORDER BY created_at DESC
+        ''')
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"System Alert: Debt Ledger query failed - {e}")
+        return []
+    finally:
+        conn.close()
+                

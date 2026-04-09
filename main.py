@@ -3,8 +3,8 @@ import sqlite3
 import matplotlib.pyplot as plt
 from datetime import date
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data
-from data_models import TransactionModel, IncomeAllocationModel, TaskModel
+from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data, get_bar_chart_data, get_active_loans, create_loan, repay_loan
+from data_models import TransactionModel, IncomeAllocationModel, TaskModel, LoanRepaymentModel, LoanModel
 
 # UI Config
 ctk.set_appearance_mode("Dark")
@@ -126,31 +126,44 @@ class ApexFinanceApp(ctk.CTk):
         self.btn_dashboard = ctk.CTkButton(self.sidebar, text="Dashboard", command=self.show_dashboard)
         self.btn_dashboard.grid(row=1, column=0, padx=20, pady=10)
         
-        # Row 2: Vault Button (ADDED BACK IN & GRIDDED)
+        # Row 2: Vault Button 
         self.btn_vaults = ctk.CTkButton(self.sidebar, text="Vault Balances", command=self.show_vaults)
         self.btn_vaults.grid(row=2, column=0, padx=20, pady=10)
         
-        # Row 3: Task Button (MOVED TO ROW 3)
+        # Row 3: Task Button 
         self.btn_tasks = ctk.CTkButton(self.sidebar, text="Task Tracker", command=self.show_tasks)
         self.btn_tasks.grid(row=3, column=0, padx=20, pady=10)
+
+        # Row 4: Telemetry Matrix
+        self.btn_telemetry = ctk.CTkButton(self.sidebar, text="Telemetry", command=self.show_telemetry)
+        self.btn_telemetry.grid(row=4, column=0, padx=20, pady=10)
+
+        # Row 5: Debt Ledger (NEW)
+        self.btn_loans = ctk.CTkButton(self.sidebar, text="Debt Ledger", command=self.show_debt)
+        self.btn_loans.grid(row=5, column=0, padx=20, pady=10)
         
-        # Row 5: Settings Button (GRID COMMAND ADDED)
+        self.sidebar.grid_rowconfigure(5, weight=0)
+        self.sidebar.grid_rowconfigure(6, weight=1) 
+        
+        # Row 7: Settings Button
         self.btn_settings = ctk.CTkButton(self.sidebar, text="Settings", fg_color="#333333", hover_color="#444444", command=self.show_settings)
-        self.btn_settings.grid(row=5, column=0, padx=20, pady=(10, 20))
+        self.btn_settings.grid(row=7, column=0, padx=20, pady=(10, 20))
         
-        # The main Content Area
+       # 1. The Main Content Area MUST be built first
         self.main_container = ctk.CTkFrame(self, corner_radius=10)
         self.main_container.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
         self.main_container.grid_rowconfigure(0, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
         
-        # Initialize Memory stack
+        # 2. Initialize Memory stack (Building the frames inside the container)
         self.build_dashboard_frame()
         self.build_task_frame()
-        self.build_vault_frame()  
+        self.build_vault_frame()
         self.build_settings_frame()
+        self.build_telemetry_frame()
+        self.build_debt_frame()       # <-- IT MUST GO EXACTLY HERE
         
-        # Boot into dashboard
+        # 3. Boot into dashboard
         self.show_dashboard()
         
     # --- UI Routing Methods ---
@@ -160,6 +173,18 @@ class ApexFinanceApp(ctk.CTk):
         self.task_frame.grid_forget()
         self.vault_frame.grid_forget()
         self.settings_frame.grid_forget()
+        self.telemetry_frame.grid_forget()
+        self.debt_frame.grid_forget() # NEW
+
+    def show_debt(self):
+        self.hide_all_frames()
+        self.debt_frame.grid(row=0, column=0, sticky="nsew")
+        self.refresh_debt_data()
+
+    def show_telemetry(self):
+        self.hide_all_frames()
+        self.telemetry_frame.grid(row=0, column=0, sticky="nsew")
+        self.refresh_telemetry_data()
 
     def show_dashboard(self):
         self.hide_all_frames()
@@ -579,6 +604,262 @@ class ApexFinanceApp(ctk.CTk):
                 # Reboot the UI back to the completely empty dashboard
                 self.show_dashboard()
         
+    # ==========================================
+    # TELEMETRY MATRIX ARCHITECTURE
+    # ==========================================
+    def build_telemetry_frame(self):
+        self.telemetry_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        
+        # Header with View Toggle
+        header_frame = ctk.CTkFrame(self.telemetry_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=40, pady=(30, 10))
+        
+        title = ctk.CTkLabel(header_frame, text="Telemetry Matrix", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(side="left")
+        
+        # The View Switcher
+        self.chart_view_var = ctk.StringVar(value="Current Month (Donut)")
+        self.view_toggle = ctk.CTkSegmentedButton(
+            header_frame, 
+            values=["Current Month (Donut)", "Yearly Volume (Bar)"], 
+            variable=self.chart_view_var, 
+            command=self.refresh_telemetry_data, # Auto-refreshes when clicked
+            selected_color="#00ffcc", 
+            selected_hover_color="#00ccaa", 
+            unselected_color="#333333", 
+            text_color="white"
+        )
+        self.view_toggle.pack(side="right")
+        
+        # The Dark Console Container
+        self.chart_container = ctk.CTkFrame(self.telemetry_frame, fg_color="#1e1e1e", corner_radius=15)
+        self.chart_container.pack(pady=20, padx=40, fill="both", expand=True)
+
+    def refresh_telemetry_data(self, *args):
+        """Renders either the Donut or the Bar graph based on the toggle state."""
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        
+        for widget in self.chart_container.winfo_children():
+            widget.destroy()
+            
+        current_view = self.chart_view_var.get()
+        
+        # Create a single, massive Matplotlib Figure
+        fig, ax = plt.subplots(figsize=(8, 5), facecolor="#1e1e1e")
+        ax.set_facecolor("#1e1e1e")
+        colors = ['#00ffcc', '#ff4444', '#ffcc00', '#cc33ff', '#3399ff', '#ff3399']
+
+        if "Donut" in current_view:
+            # --- MONTHLY DONUT LOGIC ---
+            data = get_pie_chart_data()
+            ax.set_title("Current Calendar Month Burn", color="white", weight="bold", pad=20)
+            
+            if data:
+                wedges, texts, autotexts = ax.pie(
+                    list(data.values()), labels=list(data.keys()), autopct='%1.1f%%', 
+                    startangle=90, pctdistance=0.75, colors=colors,
+                    textprops={'color': "white", 'weight': 'bold'},
+                    wedgeprops={'edgecolor': '#1e1e1e', 'linewidth': 2, 'width': 0.4} 
+                )
+                plt.setp(texts, size=12)
+                plt.setp(autotexts, size=10, weight="bold", color="black")
+                ax.axis('equal')
+            else:
+                ax.text(0.5, 0.5, 'No expenses logged this month.', color='white', ha='center', va='center', size=14)
+                
+        else:
+            # --- YEARLY BAR GRAPH LOGIC ---
+            data = get_bar_chart_data()
+            ax.set_title("Year-to-Date Burn Rate", color="white", weight="bold", pad=20)
+            
+            months = list(data.keys())
+            totals = list(data.values())
+            
+            # Matplotlib auto-scales the Y-axis based on the highest total
+            bars = ax.bar(months, totals, color="#00ffcc", edgecolor="#00ccaa", width=0.6)
+            
+            # Styling the grid
+            ax.tick_params(colors='white', labelsize=10)
+            for spine in ax.spines.values():
+                spine.set_color('#333333')
+                
+            # Add dollar amounts hovering over the bars (only if > 0)
+            for bar in bars:
+                yval = bar.get_height()
+                if yval > 0:
+                    offset = max(totals) * 0.02 if max(totals) > 0 else 1
+                    ax.text(bar.get_x() + bar.get_width()/2, yval + offset, f'${yval:,.0f}', ha='center', va='bottom', color='white', size=10, weight='bold')
+
+        plt.tight_layout()
+        
+        # Render to UI
+        canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=20)
+        plt.close(fig)
+        
+    # ==========================================
+    # DEBT LEDGER ARCHITECTURE
+    # ==========================================
+    def build_debt_frame(self):
+        """Constructs the split-pane matrix for Peer-to-Peer IOUs."""
+        self.debt_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        
+        # Header
+        title = ctk.CTkLabel(self.debt_frame, text="Debt Ledger", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(pady=(30, 10), anchor="w", padx=40)
+        
+        # --- TOP MODULE: The IOU Control Panel ---
+        form_card = ctk.CTkFrame(self.debt_frame, fg_color="#1e1e1e", corner_radius=15)
+        form_card.pack(pady=10, padx=40, fill="x")
+        
+        form_title = ctk.CTkLabel(form_card, text="SECURE NEW IOU", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
+        form_title.pack(anchor="w", padx=20, pady=(15, 5))
+        
+        input_grid = ctk.CTkFrame(form_card, fg_color="transparent")
+        input_grid.pack(fill="x", padx=20, pady=(0, 20))
+        
+        self.debt_name_entry = ctk.CTkEntry(input_grid, placeholder_text="Person's Name", width=200)
+        self.debt_name_entry.pack(side="left", padx=(0, 15))
+        
+        self.debt_amt_entry = ctk.CTkEntry(input_grid, placeholder_text="Amount", width=120)
+        self.debt_amt_entry.pack(side="left", padx=(0, 15))
+        
+        self.debt_type_var = ctk.StringVar(value="Lent")
+        self.debt_toggle = ctk.CTkSegmentedButton(input_grid, values=["Lent", "Borrowed"], variable=self.debt_type_var, selected_color="#3399ff", selected_hover_color="#2277cc")
+        self.debt_toggle.pack(side="left", padx=(0, 15))
+        
+        self.btn_secure_iou = ctk.CTkButton(input_grid, text="Execute Ledger Entry", fg_color="#3399ff", text_color="black", hover_color="#2277cc", font=ctk.CTkFont(weight="bold"))
+        self.btn_secure_iou.pack(side="left", expand=True, fill="x")
+        
+        # --- BOTTOM MODULE: The Split-Pane Matrix ---
+        ledger_container = ctk.CTkFrame(self.debt_frame, fg_color="transparent")
+        ledger_container.pack(pady=10, padx=40, fill="both", expand=True)
+        
+        # Force a perfect 50/50 split
+        ledger_container.grid_columnconfigure((0, 1), weight=1, uniform="a")
+        ledger_container.grid_rowconfigure(0, weight=1)
+        
+        # Left Column: Assets (Money Owed to You)
+        self.lent_scroll = ctk.CTkScrollableFrame(ledger_container, fg_color="#1e1e1e", corner_radius=15)
+        self.lent_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        
+        lbl_assets = ctk.CTkLabel(self.lent_scroll, text="ASSETS (Owed To You)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#00ffcc")
+        lbl_assets.pack(pady=(10, 20))
+        
+        # Right Column: Liabilities (Money You Owe)
+        self.borrowed_scroll = ctk.CTkScrollableFrame(ledger_container, fg_color="#1e1e1e", corner_radius=15)
+        self.borrowed_scroll.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        
+        lbl_liab = ctk.CTkLabel(self.borrowed_scroll, text="LIABILITIES (You Owe)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ff4444")
+        lbl_liab.pack(pady=(10, 20))
+        
+    def execute_iou_creation(self):
+        """Validates and executes a new Peer-to-Peer debt."""
+        name = self.debt_name_entry.get().strip()
+        raw_amt = self.debt_amt_entry.get()
+        l_type = self.debt_type_var.get()
+        
+        if not name or not raw_amt:
+            print("System Alert: Missing name or amount.")
+            return # Ignore empty submissions
+            
+        try:
+            amt = float(raw_amt)
+            if amt <= 0: raise ValueError
+            
+            # Formulate the payload
+            loan = LoanModel(person_name=name, principal_amount=amt, loan_type=l_type, created_at=date.today())
+            
+            # Execute backend write
+            if create_loan(loan):
+                # Clear the input fields
+                self.debt_name_entry.delete(0, 'end')
+                self.debt_amt_entry.delete(0, 'end')
+                
+                # Instantly reload the UI matrix
+                self.refresh_debt_data() 
+                
+                print(f"System OS: Successfully logged {l_type} IOU for {name}.")
+                
+        except ValueError:
+            print("System Alert: Invalid amount entered. Must be a positive number.")
+        
+    def refresh_debt_data(self):
+        """Pulls B-tree data and mathematically sorts IOUs into the Split-Pane matrix."""
+        # 1. Purge both of the NEW split columns completely
+        for widget in self.lent_scroll.winfo_children():
+            widget.destroy()
+                
+        for widget in self.borrowed_scroll.winfo_children():
+            widget.destroy()
+
+        # 2. Re-draw the Structural Headers
+        ctk.CTkLabel(self.lent_scroll, text="ASSETS (Owed To You)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#00ffcc").pack(pady=(10, 20))
+        ctk.CTkLabel(self.borrowed_scroll, text="LIABILITIES (You Owe)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ff4444").pack(pady=(10, 20))
+
+        # 3. Fetch Active Ledger Data
+        loans = get_active_loans()
+        
+        if not loans:
+            ctk.CTkLabel(self.lent_scroll, text="No active assets.", text_color="#6b7280", font=ctk.CTkFont(slant="italic")).pack(pady=20)
+            ctk.CTkLabel(self.borrowed_scroll, text="No active liabilities.", text_color="#6b7280", font=ctk.CTkFont(slant="italic")).pack(pady=20)
+            return
+
+        # 4. Render Cards dynamically into the correct columns
+        for l_id, name, principal, balance, l_type in loans:
+            # Mathematical routing based on Debt Type
+            parent = self.lent_scroll if l_type == "Lent" else self.borrowed_scroll
+            color = "#00ffcc" if l_type == "Lent" else "#ff4444"
+            btn_text = "Log Receipt" if l_type == "Lent" else "Log Payment"
+            
+            # The Card Background
+            card = ctk.CTkFrame(parent, fg_color="#2b2b2b", corner_radius=10)
+            card.pack(fill="x", pady=5, padx=10)
+            
+            # Left side of card: Typography & Progress
+            info_frame = ctk.CTkFrame(card, fg_color="transparent")
+            info_frame.pack(side="left", padx=15, pady=15, fill="x", expand=True)
+            
+            ctk.CTkLabel(info_frame, text=name, font=ctk.CTkFont(weight="bold", size=14), text_color="white").pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"${balance:,.2f} remaining of ${principal:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(anchor="w")
+            
+            # Right side of card: Execution Bridge
+            btn_repay = ctk.CTkButton(card, text=btn_text, width=100, fg_color="transparent", border_width=1, border_color=color, text_color=color, hover_color="#333333", command=lambda id=l_id, n=name, bal=balance, t=l_type: self.prompt_loan_repayment(id, n, bal, t))
+            btn_repay.pack(side="right", padx=15)
+
+    # --- EXECUTION BRIDGES ---
+    def execute_new_loan(self):
+        name = self.loan_name_entry.get().strip()
+        raw_amt = self.loan_amt_entry.get()
+        l_type = self.loan_type_var.get()
+        
+        if not name or not raw_amt:
+            return # Missing params
+            
+        try:
+            amt = float(raw_amt)
+            loan_payload = LoanModel(person_name=name, principal_amount=amt, loan_type=l_type, created_at=date.today())
+            if create_loan(loan_payload):
+                self.loan_name_entry.delete(0, 'end')
+                self.loan_amt_entry.delete(0, 'end')
+                self.refresh_debt_data()
+        except ValueError:
+            pass # Invalid amount
+
+    def trigger_repayment(self, loan_id, name, current_balance):
+        dialog = ctk.CTkInputDialog(text=f"Enter payment amount for {name} (Max: ${current_balance:,.2f}):", title="Process Repayment")
+        result = dialog.get_input()
+        
+        if result:
+            try:
+                amt = float(result)
+                repay_payload = LoanRepaymentModel(loan_id=loan_id, amount=amt)
+                if repay_loan(repay_payload):
+                    self.refresh_debt_data()
+            except ValueError:
+                pass
+    
 if __name__ == "__main__":
     app = ApexFinanceApp()
     app.mainloop()
