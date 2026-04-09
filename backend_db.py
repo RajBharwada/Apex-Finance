@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 import datetime
 from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeAllocationModel, TaskModel
+from database_setup import initialize_database
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
@@ -432,12 +433,13 @@ def execute_factory_reset() -> bool:
     cursor = conn.cursor()
     
     try:
-        cursor.execute("DROP TABLE IF EXIXTS Transactions")
-        cursor.execute("DROP TABLE IF EXIXTS Envelopes")
-        cursor.execute("DROP TABLE IF EXIXTS Tasks")
+        cursor.execute("DROP TABLE IF EXISTS Transactions")
+        cursor.execute("DROP TABLE IF EXISTS Envelopes")
+        cursor.execute("DROP TABLE IF EXISTS Tasks")
+        cursor.execute("DROP TABLE IF EXISTS Loans")
         conn.commit()
         
-        init_db()
+        initialize_database()
         seed_default_categories()
         print("System OS: Factory reset completed. Matrix reinitialized.")
         return True
@@ -450,3 +452,123 @@ def execute_factory_reset() -> bool:
     finally:
         conn.close()
         
+def update_category_principal(env_id: int, new_principal: float) -> bool:
+    """System Protocol: Updates the static Principal Target for a category."""
+
+    if env_id == 1:
+        print("System Alert: Cannot set a target for the Master Pool.")
+        return False
+        
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        
+        cursor.execute("UPDATE Envelopes SET allocated_amount = ? WHERE envelope_id = ?", (new_principal, env_id))
+        conn.commit()
+        print(f"System OS: Principal Target for Envelope {env_id} locked at ${new_principal:.2f}")
+        return True
+    
+    except Exception as e:
+        
+        print(f"System Alert: Principal update failed - {e}")
+        conn.rollback()
+        return False
+    
+    finally:
+        conn.close()
+
+def execute_monthly_replenish() -> tuple[bool, str]:
+    """System Protocol: Auto-funds all categories to their targets IF Master Pool is sufficient."""
+    
+    import datetime
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # 1. Check Master pool
+        cursor.execute("SELECT current_balance FROM Envelopes WHERE envelope_id = 1")
+        master_result = cursor.fetchone()
+        if not master_result:
+            return False, "Fatal Error: Master Pool missing."
+        master_balance = master_result[0]
+
+        # 2. check for the amount shortage
+        cursor.execute("SELECT envelope_id, name, allocated_amount, current_balance FROM Envelopes WHERE envelope_id != 1")
+        categories = cursor.fetchall()
+        
+        total_required = 0.0
+        replenish_plan = []
+        
+        for env_id, name, principal, current in categories:
+            # adds only if amt is less then principle
+            if principal > current:
+                needed = principal - current
+                total_required += needed
+                replenish_plan.append((env_id, name, needed))
+                
+        if total_required == 0.0:
+            return True, "System OS: All vaults are already at or above their Principal targets. No action needed."
+
+        # 3. checks if master pool has enough
+        if master_balance < total_required:
+            shortfall = total_required - master_balance
+            return False, f"System Alert: Master Pool is insufficient. You need ${shortfall:,.2f} more in the Master Pool to complete the cycle."
+
+        # 4. The Distribution
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        for env_id, name, needed in replenish_plan:
+            # Inject cash into category
+            cursor.execute("UPDATE Envelopes SET current_balance = current_balance + ? WHERE envelope_id = ?", (needed, env_id))
+            
+            # Write the paper trail
+            cursor.execute('''
+                INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
+                VALUES (?, ?, ?, ?)
+            ''', (env_id, needed, str(datetime.date.today()), f"SYSTEM: Monthly Cycle Replenish (+${needed:.2f})"))
+
+        # 5. Deduct the massive total from the Master Pool
+        cursor.execute("UPDATE Envelopes SET current_balance = current_balance - ? WHERE envelope_id = 1", (total_required,))
+        
+        conn.commit()
+        return True, f"System OS: Cycle complete. ${total_required:,.2f} deployed from Master Pool to categories."
+        
+    except Exception as e:
+        conn.rollback()
+        return False, f"System Alert: Replenish engine failed - {e}"
+    finally:
+        conn.close()
+        
+def add_income_to_master(amount: float, note: str) -> bool:
+    """System Protocol: Injects new money directly into the Master Pool."""
+    import datetime
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        # 1. Add money to Master Pool
+        cursor.execute('''
+            UPDATE Envelopes
+            SET current_balance = current_balance + ?
+            WHERE envelope_id = 1
+        ''', (amount,))
+        
+        # 2. Log it on the transaction tape
+        final_note = f"INCOME: {note}" if note.strip() else "INCOME: Master Pool Deposit"
+        cursor.execute('''
+            INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
+            VALUES (1, ?, ?, ?)
+        ''', (amount, str(datetime.date.today()), final_note))
+        
+        conn.commit()
+        print(f"System OS: ${amount:.2f} securely injected into Master Pool.")
+        return True
+        
+    except Exception as e:
+        print(f"System Alert: Income injection failed - {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()

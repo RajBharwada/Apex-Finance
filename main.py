@@ -1,8 +1,9 @@
 import customtkinter as ctk
 import sqlite3
-from tkinter import messagebox
+import matplotlib.pyplot as plt
 from datetime import date
-from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data
 from data_models import TransactionModel, IncomeAllocationModel, TaskModel
 
 # UI Config
@@ -56,6 +57,48 @@ class CustomConfirmDialog(ctk.CTkToplevel):
         self.wait_window()
         return self.result
 
+class AddIncomeDialog(ctk.CTkToplevel):
+    """A custom modal dedicated exclusively to Master Pool fund injections."""
+    def __init__(self):
+        super().__init__()
+        self.title("SYSTEM PROTOCOL: INJECT FUNDS")
+        self.geometry("400x300")
+        self.resizable(False, False)
+        self.configure(fg_color="#1e1e1e")
+        self.attributes("-topmost", True)
+        
+        self.amount = None
+        self.note = None
+        
+        # UI Elements
+        lbl = ctk.CTkLabel(self, text="MASTER POOL DEPOSIT", font=ctk.CTkFont(size=20, weight="bold"), text_color="#00ffcc")
+        lbl.pack(pady=(20, 10))
+        
+        self.amt_entry = ctk.CTkEntry(self, placeholder_text="Amount (e.g. 1500)", width=300, height=40)
+        self.amt_entry.pack(pady=15)
+        
+        self.note_entry = ctk.CTkEntry(self, placeholder_text="Note (e.g. Salary, Sold Item)", width=300, height=40)
+        self.note_entry.pack(pady=15)
+        
+        btn = ctk.CTkButton(self, text="AUTHORIZE DEPOSIT", fg_color="#00ccaa", text_color="black", hover_color="#00ffcc", font=ctk.CTkFont(weight="bold"), command=self.submit)
+        btn.pack(pady=20)
+        
+        # OS Lockdown Protocol
+        self.wait_visibility()
+        self.grab_set()
+        self.focus_force()
+
+    def submit(self):
+        """Captures the data and destroys the UI thread."""
+        self.amount = self.amt_entry.get()
+        self.note = self.note_entry.get()
+        self.destroy()
+
+    def get_input(self):
+        """Halts main thread until OS modal is resolved."""
+        self.wait_window()
+        return self.amount, self.note
+
 class ApexFinanceApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -69,23 +112,31 @@ class ApexFinanceApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
         
-        # The Sidebar
+        # The Sidebar Container
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
-        self.sidebar.rowconfigure(4, weight=1)
         
+        self.sidebar.grid_rowconfigure(4, weight=1)
+        
+        # The Logo
         self.logo_label = ctk.CTkLabel(self.sidebar, text="APEX OS", font=ctk.CTkFont(size=24, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 30))
         
-        # Dashboard Button
+        # Row 1: Dashboard Button
         self.btn_dashboard = ctk.CTkButton(self.sidebar, text="Dashboard", command=self.show_dashboard)
         self.btn_dashboard.grid(row=1, column=0, padx=20, pady=10)
         
-        # Task Button
-        self.btn_tasks = ctk.CTkButton(self.sidebar, text="Task Tracker", command=self.show_tasks)
-        self.btn_tasks.grid(row=2, column=0, padx=20, pady=10)
+        # Row 2: Vault Button (ADDED BACK IN & GRIDDED)
+        self.btn_vaults = ctk.CTkButton(self.sidebar, text="Vault Balances", command=self.show_vaults)
+        self.btn_vaults.grid(row=2, column=0, padx=20, pady=10)
         
+        # Row 3: Task Button (MOVED TO ROW 3)
+        self.btn_tasks = ctk.CTkButton(self.sidebar, text="Task Tracker", command=self.show_tasks)
+        self.btn_tasks.grid(row=3, column=0, padx=20, pady=10)
+        
+        # Row 5: Settings Button (GRID COMMAND ADDED)
         self.btn_settings = ctk.CTkButton(self.sidebar, text="Settings", fg_color="#333333", hover_color="#444444", command=self.show_settings)
+        self.btn_settings.grid(row=5, column=0, padx=20, pady=(10, 20))
         
         # The main Content Area
         self.main_container = ctk.CTkFrame(self, corner_radius=10)
@@ -96,7 +147,7 @@ class ApexFinanceApp(ctk.CTk):
         # Initialize Memory stack
         self.build_dashboard_frame()
         self.build_task_frame()
-        self.buid_vault_frame()
+        self.build_vault_frame()  
         self.build_settings_frame()
         
         # Boot into dashboard
@@ -134,11 +185,17 @@ class ApexFinanceApp(ctk.CTk):
         self.dashboard_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         self.dashboard_frame.grid(row=0, column=0, sticky="nsew")
 
-        # UI - Header
-        title = ctk.CTkLabel(self.dashboard_frame, text="Command Center", font=ctk.CTkFont(size=28, weight="bold"))
-        title.pack(pady=(30,10), anchor="w", padx=40)
+        # --- UI Header & Isolated Income Button ---
+        header_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=40, pady=(30, 10))
         
-        # UI - Master Pool
+        title = ctk.CTkLabel(header_frame, text="Command Center", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(side="left")
+        
+        btn_income = ctk.CTkButton(header_frame, text="+ DEPOSIT TO MASTER POOL", fg_color="#00ccaa", text_color="black", hover_color="#00ffcc", font=ctk.CTkFont(weight="bold"), command=self.trigger_income_injection)
+        btn_income.pack(side="right")
+        
+        # --- UI Master Pool Balance ---
         balance_card = ctk.CTkFrame(self.dashboard_frame, fg_color="#1e1e1e", corner_radius=15)
         balance_card.pack(pady=20, padx=40, fill="x")
         
@@ -148,19 +205,25 @@ class ApexFinanceApp(ctk.CTk):
         self.lbl_balance = ctk.CTkLabel(balance_card, text="$0.00", font=ctk.CTkFont(size=56, weight="bold"), text_color="#00ffcc")
         self.lbl_balance.pack(pady=(0, 20))
         
-        # --- Transaction Module ---
+        # --- Transaction Module (Expense Only) ---
         form_frame = ctk.CTkFrame(self.dashboard_frame, fg_color="transparent")
-        form_frame.pack(pady=10, padx= 40, fill="x")
+        form_frame.pack(pady=10, padx=40, fill="x")
         
-        form_title = ctk.CTkLabel(form_frame, text="LOG TRANSACTION", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
+        form_title = ctk.CTkLabel(form_frame, text="LOG EXPENSE", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
         form_title.pack(anchor="w", pady=(0, 10))
         
-        input_grid = ctk.CTkFrame(form_frame, fg_color="transparent")
-        input_grid.pack(fill="x", pady=5)
+        # Dark container for the input elements
+        input_container = ctk.CTkFrame(form_frame, fg_color="#1e1e1e", corner_radius=10)
+        input_container.pack(fill="x", pady=5)
         
-        self.tx_type_var = ctk.StringVar(value="Expense")
-        self.type_toggle = ctk.CTkSegmentedButton(input_grid, values=["Expense", "Income"], variable=self.tx_type_var, selected_color="#00ffcc", selected_hover_color="#00ccaa", unselected_color="#333333", text_color="white")
-        self.type_toggle.pack(side="left", padx=(0, 10), fill="x")
+        input_grid = ctk.CTkFrame(input_container, fg_color="transparent")
+        input_grid.pack(pady=15, padx=20, fill="x")
+        
+        self.amount_entry = ctk.CTkEntry(input_grid, placeholder_text="Amount", width=120)
+        self.amount_entry.pack(side="left", padx=(0, 10))
+        
+        self.note_entry = ctk.CTkEntry(input_grid, placeholder_text="What was this for?", width=200)
+        self.note_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
         
         self.env_var = ctk.StringVar(value="Loading...")
         self.dropdown = ctk.CTkOptionMenu(
@@ -175,24 +238,32 @@ class ApexFinanceApp(ctk.CTk):
         self.btn_del_env = ctk.CTkButton(input_grid, text="-", width=30, fg_color="#333333", hover_color="#ff4444", text_color="white", command=self.execute_delete_envelope)
         self.btn_del_env.pack(side="left", padx=(0, 10))
         
-        self.amount_entry = ctk.CTkEntry(input_grid, placeholder_text="Amount (e.g. 15.00)", width=120)
-        self.amount_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
-        
-        self.note_entry = ctk.CTkEntry(input_grid, placeholder_text="Transaction Note...", width=200)
-        self.note_entry.pack(side="left", padx=(0, 10), expand=True, fill="x")
-        
         self.btn_submit = ctk.CTkButton(input_grid, text="Execute", fg_color="#00ffcc", text_color="black", hover_color="#00ccaa", font=ctk.CTkFont(weight="bold"), command=self.process_transaction)
-        self.btn_submit.pack(side="left", fill="x")
+        self.btn_submit.pack(side="left")
         
         self.status_lbl = ctk.CTkLabel(form_frame, text="", font=ctk.CTkFont(size=12))
-        self.status_lbl.pack(anchor="w", pady=10)
+        self.status_lbl.pack(anchor="w", pady=5)
         
-        # Live Ledger UI Container
+        # --- Live Ledger UI Container ---
         ledger_title = ctk.CTkLabel(self.dashboard_frame, text="TRANSACTION TAPE", font=ctk.CTkFont(size=12, weight="bold"), text_color="#6b7280")
         ledger_title.pack(anchor="w", padx=40, pady=(10, 0))
         
         self.ledger_frame = ctk.CTkScrollableFrame(self.dashboard_frame, fg_color="#1e1e1e", corner_radius=10, height=200)
         self.ledger_frame.pack(pady=10, padx=40, fill="both", expand=True)
+
+    def trigger_income_injection(self):
+        """Summons the custom modal and routes funds strictly to the Master Pool."""
+        dialog = AddIncomeDialog()
+        raw_amt, raw_note = dialog.get_input()
+        
+        if raw_amt:
+            try:
+                amt_float = float(raw_amt)
+                if add_income_to_master(amt_float, raw_note):
+                    self.status_lbl.configure(text="System OS: Master Pool funded successfully.", text_color="#00ffcc")
+                    self.refresh_dashboard_data()
+            except ValueError:
+                self.status_lbl.configure(text="System Alert: Invalid income amount.", text_color="red")
 
     def refresh_dashboard_data(self):
         """Silently queries the database and updates only the text and list items."""
@@ -247,47 +318,33 @@ class ApexFinanceApp(ctk.CTk):
                 ctk.CTkButton(row, text="X", width=30, fg_color="#333333", hover_color="#ff4444", text_color="white", command=lambda t_id=tx_id: self.execute_delete(t_id)).pack(side="right", padx=(5, 10))
                    
     def process_transaction(self):
-        """Execute UI string, translate types, and pushes to the backend database."""
+        """Dedicated execution bridge strictly for logging Category Expenses."""
         raw_amt = self.amount_entry.get()
         note_txt = self.note_entry.get()
         selected_env_name = self.env_var.get()
-        tx_type = self.tx_type_var.get()
         
-        if selected_env_name == "+ Add New Category...":
-            self.status_lbl.configure(text="System Alert: Please select a valid category first.", text_color="red")
+        # 1. Parameter Validation
+        if not raw_amt or selected_env_name in ["+ Add New Category...", "Loading..."]:
+            self.status_lbl.configure(text="System Alert: Missing transaction parameters.", text_color="red")
             return
-        
+            
         try:
             amt_float = float(raw_amt)
             env_id = self.env_mapping[selected_env_name]
             
-            if tx_type == "Expense":
-                tx = TransactionModel(
-                    envelope_id=env_id,
-                    amount=amt_float,
-                    transaction_date=date.today(),
-                    note=note_txt
-                )
-                success = save_transaction(tx)
-                
-            elif tx_type == "Income":
-                payload = IncomeAllocationModel(allocations={env_id: amt_float})
-                success = distribute_income(payload)
-                
-                if success and note_txt:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
-                        VALUES (?, ?, ?, ?)
-                    ''', (env_id, amt_float, str(date.today()), f"INCOME: {note_txt}"))
-                    conn.commit()
-                    conn.close
+            # 2. Formulate the Expense Payload
+            tx = TransactionModel(
+                envelope_id=env_id,
+                amount=amt_float,
+                transaction_date=date.today(),
+                note=note_txt
+            )
             
-            if success:
+            # 3. Execute backend write
+            if save_transaction(tx):
                 self.amount_entry.delete(0, 'end')
                 self.note_entry.delete(0, 'end')
-                
+                self.status_lbl.configure(text="System OS: Expense logged securely.", text_color="#00ffcc")
                 self.refresh_dashboard_data()
             else:
                 self.status_lbl.configure(text="System Alert: Backend write failed.", text_color="red")
@@ -416,44 +473,81 @@ class ApexFinanceApp(ctk.CTk):
             else:
                 self.status_lbl.configure(text="System Alert: Deletion failed.", text_color="red")
         
-    def buid_vault_frame(self):
-        """Constructs the static UI matrix for the 2-column Vault Grid."""
+    def build_vault_frame(self):
         self.vault_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         
-        title = ctk.CTkLabel(self.vault_frame, text="Vault Balances", font=ctk.CTkFont(size=28, weight="bold"))
-        title.pack(pady=(30, 10), anchor="w", padx=40)
+        # Header Area
+        header = ctk.CTkFrame(self.vault_frame, fg_color="transparent")
+        header.pack(fill="x", padx=40, pady=(30, 10))
+        
+        title = ctk.CTkLabel(header, text="Vault Balances", font=ctk.CTkFont(size=28, weight="bold"))
+        title.pack(side="left")
+        
+        # The Master Replenish Button
+        btn_replenish = ctk.CTkButton(header, text="RUN MONTHLY REPLENISH", fg_color="#00ffcc", text_color="black", hover_color="#00ccaa", font=ctk.CTkFont(weight="bold"), command=self.trigger_monthly_cycle)
+        btn_replenish.pack(side="right")
         
         self.vault_scroll = ctk.CTkScrollableFrame(self.vault_frame, fg_color="transparent")
         self.vault_scroll.pack(fill="both", expand=True, padx=30, pady=10)
-        
         self.vault_scroll.grid_columnconfigure((0, 1), weight=1)
-    
+
     def refresh_vault_data(self):
-        """Pulls dynamic B-tree and renders the 2-column cards."""
         for widget in self.vault_scroll.winfo_children():
             widget.destroy()
             
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT name, current_balance FROM Envelopes ORDER BY envelope_id ASC")
+        cursor.execute("SELECT envelope_id, name, allocated_amount, current_balance FROM Envelopes ORDER BY envelope_id ASC")
         vaults = cursor.fetchall()
         conn.close()
         
-        for i, (name, balance) in enumerate(vaults):
+        for i, (env_id, name, target, balance) in enumerate(vaults):
             row = i // 2
             col = i % 2
             
             card = ctk.CTkFrame(self.vault_scroll, fg_color="#1e1e1e", corner_radius=15)
             card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
             
-            lbl_name = ctk.CTkLabel(card, text=name, font=ctk.CTkFont(size=14, weight="bold"), text_color="#6b7280")
-            lbl_name.pack(pady=(20, 5))
+            lbl_name = ctk.CTkLabel(card, text=name, font=ctk.CTkFont(size=16, weight="bold"), text_color="#6b7280")
+            lbl_name.pack(pady=(15, 0))
+            
+            if env_id != 1:
+                lbl_target = ctk.CTkLabel(card, text=f"Target: ${target:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3")
+                lbl_target.pack(pady=(0, 10))
+            else:
+                ctk.CTkLabel(card, text="Reservoir", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(pady=(0, 10))
             
             lbl_bal = ctk.CTkLabel(card, text=f"${balance:,.2f}", font=ctk.CTkFont(size=32, weight="bold"), text_color="#00ffcc")
+            lbl_bal.pack(pady=(0, 10))
+            
+            # The Edit Target Button
+            if env_id != 1:
+                btn_edit = ctk.CTkButton(card, text="Edit Target", width=100, height=24, fg_color="#333333", hover_color="#444444", command=lambda e=env_id, n=name: self.prompt_target_update(e, n))
+                btn_edit.pack(pady=(0, 15))
+
+    def prompt_target_update(self, env_id, env_name):
+        """Spawns an OS dialog to ask the user for a new Principal Target."""
+        dialog = ctk.CTkInputDialog(text=f"Enter new monthly target for {env_name}:", title="Update Target")
+        result = dialog.get_input()
         
-    # ==========================================
-    # SETTINGS & SECURITY ARCHITECTURE
-    # ==========================================
+        if result is not None:
+            try:
+                new_target = float(result)
+                if update_category_principal(env_id, new_target):
+                    self.refresh_vault_data() 
+            except ValueError:
+                pass 
+
+    def trigger_monthly_cycle(self):
+        """Fires the Auto-Replenish engine and renders the result modal."""
+        success, message = execute_monthly_replenish()
+        
+        title = "CYCLE COMPLETE" if success else "SYSTEM ALERT"
+        dialog = CustomConfirmDialog(title, message)
+        dialog.get_result()
+        
+        self.refresh_vault_data()
+    
     def build_settings_frame(self):
         """Constructs the Settings UI and the Danger Zone."""
         self.settings_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
