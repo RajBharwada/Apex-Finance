@@ -323,11 +323,11 @@ def delete_transaction(transaction_id: int) -> bool:
         
         if is_income:
             cursor.execute('''
-                UPDATE Envelopes
-                SET current_balance = currenct_balance - ?,
-                    allocated_amount = allocated_amount - ?
-                WHERE envelope_id = ?
-            ''', (amount, env_id))
+            UPDATE Envelopes
+            SET current_balance = current_balance - ?,
+                allocated_amount = allocated_amount - ?
+            WHERE envelope_id = ?
+        ''', (amount, env_id))
             
         else:
             cursor.execute('''

@@ -36,7 +36,7 @@ def ingest_csv(file_path: str) -> bool:
                     
             elif raw_amt > 0:
                 # Income
-                payload = IncomeAllocationModel(allocation={1: raw_amt})
+                payload = IncomeAllocationModel(allocations={1: raw_amt})
                 if distribute_income(payload):
                     
                     conn = sqlite3.connect(DB_PATH)

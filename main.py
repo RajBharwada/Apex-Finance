@@ -397,7 +397,7 @@ class ApexFinanceApp(ctk.CTk):
                     self.refresh_dashboard_data()
                     self.env_var.set(new_env_name)
                 else:
-                    self.dash_status.configure(text="System Alert: Category already exists.", text_color="red")
+                    self.status_lbl.configure(text="System Alert: Category already exists.", text_color="red")
                     self.env_var.set(list(self.env_mapping.keys())[0])
             else:
                 self.env_var.set(list(self.env_mapping.keys())[0])
@@ -729,7 +729,7 @@ class ApexFinanceApp(ctk.CTk):
         self.debt_toggle = ctk.CTkSegmentedButton(input_grid, values=["Lent", "Borrowed"], variable=self.debt_type_var, selected_color="#3399ff", selected_hover_color="#2277cc")
         self.debt_toggle.pack(side="left", padx=(0, 15))
         
-        self.btn_secure_iou = ctk.CTkButton(input_grid, text="Execute Ledger Entry", fg_color="#3399ff", text_color="black", hover_color="#2277cc", font=ctk.CTkFont(weight="bold"))
+        self.btn_secure_iou = ctk.CTkButton(input_grid, text="Execute Ledger Entry", fg_color="#3399ff", text_color="black", hover_color="#2277cc", font=ctk.CTkFont(weight="bold"), command=self.execute_iou_creation)
         self.btn_secure_iou.pack(side="left", expand=True, fill="x")
         
         # --- BOTTOM MODULE: The Split-Pane Matrix ---
@@ -825,7 +825,7 @@ class ApexFinanceApp(ctk.CTk):
             ctk.CTkLabel(info_frame, text=f"${balance:,.2f} remaining of ${principal:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(anchor="w")
             
             # Right side of card: Execution Bridge
-            btn_repay = ctk.CTkButton(card, text=btn_text, width=100, fg_color="transparent", border_width=1, border_color=color, text_color=color, hover_color="#333333", command=lambda id=l_id, n=name, bal=balance, t=l_type: self.prompt_loan_repayment(id, n, bal, t))
+            btn_repay = ctk.CTkButton(card, text=btn_text, width=100, fg_color="transparent", border_width=1, border_color=color, text_color=color, hover_color="#333333", command=lambda id=l_id, n=name, bal=balance: self.trigger_repayment(id, n, bal))
             btn_repay.pack(side="right", padx=15)
 
     # --- EXECUTION BRIDGES ---
