@@ -46,10 +46,10 @@ def save_transaction(transaction: TransactionModel) -> bool:
                 SET current_balance = current_balance + ?
                 WHERE envelope_id = ?
             ''', (deficit, transaction.envelope_id))
-            print(f"System OS: Deficit detected. Auto-transferred ${deficit:.2f} from the Master Pool.")
+            print(f"System OS: Deficit detected. Auto-transferred ₹{deficit:.2f} from the Master Pool.")
         
         conn.commit()
-        print(f"System OS: Transaction of ${transaction.amount} securely written to disk")
+        print(f"System OS: Transaction of ₹{transaction.amount} securely written to disk")
         return True
         
     except sqlite3.Error as e:
@@ -78,7 +78,7 @@ def create_loan(loan: LoanModel) -> bool:
         ))
         
         conn.commit()
-        print(f"System OS: IOU secured. {loan.loan_type} ${loan.principal_amount:.2f}, with {loan.person_name}.")
+        print(f"System OS: IOU secured. {loan.loan_type} ₹{loan.principal_amount:.2f}, with {loan.person_name}.")
         return True
     
     except sqlite3.Error as e:
@@ -105,7 +105,7 @@ def repay_loan(repayment: LoanRepaymentModel) -> bool:
         current_balance, person_name, loan_type = result
         
         if repayment.amount > current_balance:
-            raise ValueError(f"Integrity Error: Repayment of ${repayment.amount:.2f} exceeds {person_name}'s remaining balance of ${current_balance:.2f}.")
+            raise ValueError(f"Integrity Error: Repayment of ₹{repayment.amount:.2f} exceeds {person_name}'s remaining balance of ₹{current_balance:.2f}.")
         
         cursor.execute('''
             UPDATE Loans
@@ -114,7 +114,7 @@ def repay_loan(repayment: LoanRepaymentModel) -> bool:
         ''', (repayment.amount, repayment.loan_id))
         
         conn.commit()
-        print(f"System OS: Repayment processed. ${repayment.amount:.2f} safely deducted from {person_name}'s ledger.")
+        print(f"System OS: Repayment processed. ₹{repayment.amount:.2f} safely deducted from {person_name}'s ledger.")
         return True
     
     except Exception as e:
@@ -339,7 +339,7 @@ def delete_transaction(transaction_id: int) -> bool:
         cursor.execute("DELETE FROM Transactions WHERE transaction_id = ?", (transaction_id,))
         
         conn.commit()
-        print(f"System OS: Transaction {transaction_id} purged. ${amount} refunded successfully.")
+        print(f"System OS: Transaction {transaction_id} purged. ₹{amount} refunded successfully.")
         return True
     
     except Exception as e:
@@ -433,7 +433,7 @@ def delete_custom_envelope(env_id: int, env_name: str) -> bool:
             
         curr_bal = result[0] or 0.0
         alloc_amt = result[1] or 0.0
-        print(f"System OS: Intercepted '{env_name}' -> Balance: ${curr_bal} | Allocated: ${alloc_amt}")
+        print(f"System OS: Intercepted '{env_name}' -> Balance: ₹{curr_bal} | Allocated: ₹{alloc_amt}")
 
         cursor.execute('''
             UPDATE Envelopes 
@@ -502,7 +502,7 @@ def update_category_principal(env_id: int, new_principal: float) -> bool:
         
         cursor.execute("UPDATE Envelopes SET allocated_amount = ? WHERE envelope_id = ?", (new_principal, env_id))
         conn.commit()
-        print(f"System OS: Principal Target for Envelope {env_id} locked at ${new_principal:.2f}")
+        print(f"System OS: Principal Target for Envelope {env_id} locked at ₹{new_principal:.2f}")
         return True
     
     except Exception as e:
@@ -549,7 +549,7 @@ def execute_monthly_replenish() -> tuple[bool, str]:
         # 3. checks if master pool has enough
         if master_balance < total_required:
             shortfall = total_required - master_balance
-            return False, f"System Alert: Master Pool is insufficient. You need ${shortfall:,.2f} more in the Master Pool to complete the cycle."
+            return False, f"System Alert: Master Pool is insufficient. You need ₹{shortfall:,.2f} more in the Master Pool to complete the cycle."
 
         # 4. The Distribution
         cursor.execute("PRAGMA foreign_keys = ON;")
@@ -561,13 +561,13 @@ def execute_monthly_replenish() -> tuple[bool, str]:
             cursor.execute('''
                 INSERT INTO Transactions (envelope_id, amount, transaction_date, note)
                 VALUES (?, ?, ?, ?)
-            ''', (env_id, needed, str(datetime.date.today()), f"SYSTEM: Monthly Cycle Replenish (+${needed:.2f})"))
+            ''', (env_id, needed, str(datetime.date.today()), f"SYSTEM: Monthly Cycle Replenish (+₹{needed:.2f})"))
 
         # 5. Deduct the massive total from the Master Pool
         cursor.execute("UPDATE Envelopes SET current_balance = current_balance - ? WHERE envelope_id = 1", (total_required,))
         
         conn.commit()
-        return True, f"System OS: Cycle complete. ${total_required:,.2f} deployed from Master Pool to categories."
+        return True, f"System OS: Cycle complete. ₹{total_required:,.2f} deployed from Master Pool to categories."
         
     except Exception as e:
         conn.rollback()
@@ -599,7 +599,7 @@ def add_income_to_master(amount: float, note: str) -> bool:
         ''', (amount, str(datetime.date.today()), final_note))
         
         conn.commit()
-        print(f"System OS: ${amount:.2f} securely injected into Master Pool.")
+        print(f"System OS: ₹{amount:.2f} securely injected into Master Pool.")
         return True
         
     except Exception as e:

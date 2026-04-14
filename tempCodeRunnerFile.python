@@ -1,0 +1,80 @@
+import tkinter as tk
+from tkinter import messagebox
+import sqlite3
+
+# 1. Database Setup: Connects to (or creates) the database efficiently
+conn = sqlite3.connect('spandan_records.db')
+cursor = conn.cursor()
+cursor.execute('''CREATE TABLE IF NOT EXISTS students 
+                  (name TEXT, branch TEXT, game TEXT)''')
+conn.commit()
+
+# 2. Function to insert data
+def submit_data():
+    name = name_entry.get()
+    branch = branch_entry.get()
+    game = game_entry.get()
+
+    if name and branch and game:
+        # Using parameterized queries prevents SQL injection and is a good habit
+        cursor.execute("INSERT INTO students VALUES (?, ?, ?)", (name, branch, game))
+        conn.commit()
+        
+        # Clear fields after successful submission
+        name_entry.delete(0, tk.END)
+        branch_entry.delete(0, tk.END)
+        game_entry.delete(0, tk.END)
+        messagebox.showinfo("Success", "Student data saved!")
+    else:
+        messagebox.showwarning("Error", "Please fill out all fields.")
+
+# 3. Function to view records in a scrollable window
+def view_records():
+    # Create a secondary window
+    view_win = tk.Toplevel(root)
+    view_win.title("Stored Records")
+    view_win.geometry("400x300")
+
+    # Add a scrollbar
+    scrollbar = tk.Scrollbar(view_win)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # Use a Listbox to display the data efficiently
+    listbox = tk.Listbox(view_win, yscrollcommand=scrollbar.set, width=50)
+    
+    cursor.execute("SELECT * FROM students")
+    records = cursor.fetchall()
+    
+    for row in records:
+        listbox.insert(tk.END, f"{row[0]} | {row[1]} | {row[2]}")
+        
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.config(command=listbox.yview)
+
+# 4. Main GUI Setup
+root = tk.Tk()
+root.title("XIE Spandan Data Collection")
+root.geometry("300x200")
+
+# Form Labels and Entries
+tk.Label(root, text="Student Name:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+name_entry = tk.Entry(root)
+name_entry.grid(row=0, column=1, padx=10, pady=10)
+
+tk.Label(root, text="Branch:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+branch_entry = tk.Entry(root)
+branch_entry.grid(row=1, column=1, padx=10, pady=5)
+
+tk.Label(root, text="Favorite Game:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+game_entry = tk.Entry(root)
+game_entry.grid(row=2, column=1, padx=10, pady=10)
+
+# Action Buttons
+tk.Button(root, text="Submit", command=submit_data).grid(row=3, column=0, pady=10)
+tk.Button(root, text="View Records", command=view_records).grid(row=3, column=1, pady=10)
+
+# Run the application
+root.mainloop()
+
+# Clean up database connection when the app is closed
+conn.close()

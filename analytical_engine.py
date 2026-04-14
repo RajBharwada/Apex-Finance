@@ -45,12 +45,12 @@ def run_predictive_engine(envlope_id: int) -> str:
         predicted_final_balance = current_balance - projected_future_rate
         
         report = f"\n--- Predictive Analysis: [{name}] ---\n"
-        report += f"Current Balance: ${current_balance:.2f}\n"
-        report += f"Velocity: Burning ${daily_burn_rate:.2f}\n"
-        report += f"Projected EOM Balance: ${predicted_final_balance:.2f}\n"
+        report += f"Current Balance: ₹{current_balance:.2f}\n"
+        report += f"Velocity: Burning ₹{daily_burn_rate:.2f}\n"
+        report += f"Projected EOM Balance: ₹{predicted_final_balance:.2f}\n"
         
         if predicted_final_balance < 0:
-            report += f">> STATUS RED: At current velocity, envelope will overdraw by ${abs(predicted_final_balance):.2f}. <<"
+            report += f">> STATUS RED: At current velocity, envelope will overdraw by ₹{abs(predicted_final_balance):.2f}. <<"
         else:
             report += ">> STATUS GREEN: Trajectory safe. <<"
         

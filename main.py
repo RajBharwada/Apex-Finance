@@ -227,7 +227,8 @@ class ApexFinanceApp(ctk.CTk):
         lbl_pool = ctk.CTkLabel(balance_card, text="MASTER POOL BALANCE", font=ctk.CTkFont(size=12), text_color="#6b7280")
         lbl_pool.pack(pady=(20, 0))
         
-        self.lbl_balance = ctk.CTkLabel(balance_card, text="$0.00", font=ctk.CTkFont(size=56, weight="bold"), text_color="#00ffcc")
+        
+        self.lbl_balance = ctk.CTkLabel(balance_card, text="₹0.00", font=ctk.CTkFont(size=56, weight="bold"), text_color="#00ffcc")
         self.lbl_balance.pack(pady=(0, 20))
         
         # --- Transaction Module (Expense Only) ---
@@ -312,7 +313,7 @@ class ApexFinanceApp(ctk.CTk):
             conn.close()
 
         # Update Live Text
-        self.lbl_balance.configure(text=f"${master_balance:,.2f}")
+        self.lbl_balance.configure(text=f"₹{master_balance:,.2f}")
         
         # Update Dropdown
         self.dropdown.configure(values=env_names)
@@ -338,7 +339,7 @@ class ApexFinanceApp(ctk.CTk):
 
                 ctk.CTkLabel(row, text=tx_date, width=90, anchor="w", text_color="#a3a3a3").pack(side="left", padx=(10, 5))
                 ctk.CTkLabel(row, text=env_name, width=120, anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
-                ctk.CTkLabel(row, text=f"{prefix}${amount:,.2f}", width=90, anchor="e", text_color=amt_color, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
+                ctk.CTkLabel(row, text=f"{prefix}₹{amount:,.2f}", width=90, anchor="e", text_color=amt_color, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
                 ctk.CTkLabel(row, text=note, width=200, anchor="w", text_color="#6b7280").pack(side="left", padx=10, expand=True, fill="x")
                 ctk.CTkButton(row, text="X", width=30, fg_color="#333333", hover_color="#ff4444", text_color="white", command=lambda t_id=tx_id: self.execute_delete(t_id)).pack(side="right", padx=(5, 10))
                    
@@ -537,12 +538,12 @@ class ApexFinanceApp(ctk.CTk):
             lbl_name.pack(pady=(15, 0))
             
             if env_id != 1:
-                lbl_target = ctk.CTkLabel(card, text=f"Target: ${target:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3")
+                lbl_target = ctk.CTkLabel(card, text=f"Target: ₹{target:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3")
                 lbl_target.pack(pady=(0, 10))
             else:
                 ctk.CTkLabel(card, text="Reservoir", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(pady=(0, 10))
             
-            lbl_bal = ctk.CTkLabel(card, text=f"${balance:,.2f}", font=ctk.CTkFont(size=32, weight="bold"), text_color="#00ffcc")
+            lbl_bal = ctk.CTkLabel(card, text=f"₹{balance:,.2f}", font=ctk.CTkFont(size=32, weight="bold"), text_color="#00ffcc")
             lbl_bal.pack(pady=(0, 10))
             
             # The Edit Target Button
@@ -688,7 +689,7 @@ class ApexFinanceApp(ctk.CTk):
                 yval = bar.get_height()
                 if yval > 0:
                     offset = max(totals) * 0.02 if max(totals) > 0 else 1
-                    ax.text(bar.get_x() + bar.get_width()/2, yval + offset, f'${yval:,.0f}', ha='center', va='bottom', color='white', size=10, weight='bold')
+                    ax.text(bar.get_x() + bar.get_width()/2, yval + offset, f'₹{yval:,.0f}', ha='center', va='bottom', color='white', size=10, weight='bold')
 
         plt.tight_layout()
         
@@ -822,33 +823,15 @@ class ApexFinanceApp(ctk.CTk):
             info_frame.pack(side="left", padx=15, pady=15, fill="x", expand=True)
             
             ctk.CTkLabel(info_frame, text=name, font=ctk.CTkFont(weight="bold", size=14), text_color="white").pack(anchor="w")
-            ctk.CTkLabel(info_frame, text=f"${balance:,.2f} remaining of ${principal:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"₹{balance:,.2f} remaining of ₹{principal:,.2f}", font=ctk.CTkFont(size=12), text_color="#a3a3a3").pack(anchor="w")
             
             # Right side of card: Execution Bridge
             btn_repay = ctk.CTkButton(card, text=btn_text, width=100, fg_color="transparent", border_width=1, border_color=color, text_color=color, hover_color="#333333", command=lambda id=l_id, n=name, bal=balance: self.trigger_repayment(id, n, bal))
             btn_repay.pack(side="right", padx=15)
 
     # --- EXECUTION BRIDGES ---
-    def execute_new_loan(self):
-        name = self.loan_name_entry.get().strip()
-        raw_amt = self.loan_amt_entry.get()
-        l_type = self.loan_type_var.get()
-        
-        if not name or not raw_amt:
-            return # Missing params
-            
-        try:
-            amt = float(raw_amt)
-            loan_payload = LoanModel(person_name=name, principal_amount=amt, loan_type=l_type, created_at=date.today())
-            if create_loan(loan_payload):
-                self.loan_name_entry.delete(0, 'end')
-                self.loan_amt_entry.delete(0, 'end')
-                self.refresh_debt_data()
-        except ValueError:
-            pass # Invalid amount
-
     def trigger_repayment(self, loan_id, name, current_balance):
-        dialog = ctk.CTkInputDialog(text=f"Enter payment amount for {name} (Max: ${current_balance:,.2f}):", title="Process Repayment")
+        dialog = ctk.CTkInputDialog(text=f"Enter payment amount for {name} (Max: ₹{current_balance:,.2f}):", title="Process Repayment")
         result = dialog.get_input()
         
         if result:
