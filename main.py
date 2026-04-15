@@ -118,7 +118,7 @@ class ApexFinanceApp(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#111111")
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         
-        self.sidebar.grid_rowconfigure(4, weight=1)
+        self.sidebar.grid_rowconfigure(4, weight=0)
         
         # The Logo
         self.logo_label = ctk.CTkLabel(self.sidebar, text="APEX OS", font=ctk.CTkFont(family="Segoe UI",size=24, weight="bold"))
