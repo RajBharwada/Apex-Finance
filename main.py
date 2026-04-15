@@ -619,9 +619,6 @@ class ApexFinanceApp(ctk.CTk):
                 # Reboot the UI back to the completely empty dashboard
                 self.show_dashboard()
         
-    # ==========================================
-    # TELEMETRY MATRIX ARCHITECTURE
-    # ==========================================
     def build_telemetry_frame(self):
         self.telemetry_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         
@@ -717,9 +714,6 @@ class ApexFinanceApp(ctk.CTk):
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=20)
         plt.close(fig)
         
-    # ==========================================
-    # DEBT LEDGER ARCHITECTURE
-    # ==========================================
     def build_debt_frame(self):
         """Constructs the split-pane matrix for Peer-to-Peer IOUs."""
         self.debt_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
