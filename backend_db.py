@@ -182,14 +182,14 @@ def create_task(task: TaskModel) -> bool:
         conn.close()
         
 def complete_task(task_id: int) -> bool:
-    """Flips the binary state of a task to True (1)."""
+    """Toggles the binary state of a task between True (1) and False (0)."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     try:
         cursor.execute('''
             UPDATE Tasks
-            SET is_completed = 1
+            SET is_completed = CASE WHEN is_completed = 1 THEN 0 ELSE 1 END
             WHERE task_id = ?
         ''', (task_id,))
         
@@ -351,15 +351,14 @@ def delete_transaction(transaction_id: int) -> bool:
         conn.close()
         
 def get_active_tasks() -> list:
-    """System Protocol: Pulls all incomplete tasks (Binary 0) from the B-tree."""
+    """System Protocol: Pulls all tasks from the B-tree."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     try:
         cursor.execute('''
-            SELECT task_id, description, due_date
+            SELECT task_id, description, due_date, is_completed
             FROM Tasks
-            WHERE is_completed = 0
             ORDER BY task_id DESC
         ''')
         return cursor.fetchall()
@@ -627,4 +626,18 @@ def get_active_loans() -> list:
         return []
     finally:
         conn.close()
-                
+        
+def delete_task(task_id: int) -> bool:
+    """System Protocol: Permanently purges a task from the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM Tasks WHERE task_id = ?", (task_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"System Alert: Task deletion failed - {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
