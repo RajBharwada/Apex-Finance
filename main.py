@@ -3,7 +3,7 @@ import sqlite3
 import matplotlib.pyplot as plt
 from datetime import date
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data, get_bar_chart_data, get_active_loans, create_loan, repay_loan, seed_default_categories, delete_task, export_data_to_csv, reset_database_registry
+from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data, get_bar_chart_data, get_active_loans, create_loan, repay_loan, seed_default_categories, delete_task, export_data_to_csv, reset_database_registry, get_savings_jars, create_savings_jar, fund_savings_jar, delete_savings_jar
 from database_setup import initialize_database
 from data_models import TransactionModel, IncomeAllocationModel, TaskModel, LoanRepaymentModel, LoanModel
 from report_generation import generate_transaction_ledger
@@ -29,7 +29,11 @@ class CustomConfirmDialog(ctk.CTkToplevel):
         
         # PROTOCOL 1: Geometry Expansion
         # Increased height from 280 to 340 to accommodate multi-line warnings
-        self.geometry("450x340") 
+        # Replace self.geometry("450x340") with:
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 450) / 2)
+        y = int((self.winfo_screenheight() - 340) / 2)
+        self.geometry(f"450x340+{x}+{y}")
         self.resizable(False, False)
         self.configure(fg_color="#080808")
         self.attributes("-topmost", True)
@@ -89,7 +93,10 @@ class AddIncomeDialog(ctk.CTkToplevel):
     def __init__(self):
         super().__init__()
         self.title("Registry Update")
-        self.geometry("400x380")
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 400) / 2)
+        y = int((self.winfo_screenheight() - 380) / 2)
+        self.geometry(f"400x380+{x}+{y}")
         self.resizable(False, False)
         self.configure(fg_color="#080808")
         self.attributes("-topmost", True)
@@ -144,7 +151,10 @@ class ForecastDialog(ctk.CTkToplevel):
     def __init__(self, report_text):
         super().__init__()
         self.title("Budget Alert")
-        self.geometry("450x470")
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 450) / 2)
+        y = int((self.winfo_screenheight() - 470) / 2)
+        self.geometry(f"450x470+{x}+{y}")
         self.resizable(False, False)
         self.configure(fg_color="#111111")
         self.attributes("-topmost", True)
@@ -230,7 +240,11 @@ class SystemMessageDialog(ctk.CTkToplevel):
     def __init__(self, title, message, color="#0A84FF"):
         super().__init__()
         self.title("System Notification")
-        self.geometry("400x260")
+        # Replace self.geometry("400x260") with:
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 400) / 2)
+        y = int((self.winfo_screenheight() - 260) / 2)
+        self.geometry(f"400x260+{x}+{y}")
         self.resizable(False, False)
         self.configure(fg_color="#080808")
         self.attributes("-topmost", True)
@@ -251,7 +265,11 @@ class LuxuryInputDialog(ctk.CTkToplevel):
     def __init__(self, title, prompt, on_submit):
         super().__init__()
         self.title("System Request")
-        self.geometry("400x280")
+        # Replace self.geometry("400x280") with:
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 400) / 2)
+        y = int((self.winfo_screenheight() - 280) / 2)
+        self.geometry(f"400x280+{x}+{y}")
         self.resizable(False, False)
         self.configure(fg_color="#080808")
         self.attributes("-topmost", True)
@@ -297,6 +315,69 @@ class LuxuryInputDialog(ctk.CTkToplevel):
             self.on_submit(val)
             self.destroy()
 
+class AddJarDialog(ctk.CTkToplevel):
+    """A dedicated luxury portal with dual inputs for forging new Savings Jars."""
+    def __init__(self):
+        super().__init__()
+        self.title("Registry Update")
+        self.update_idletasks()
+        x = int((self.winfo_screenwidth() - 400) / 2)
+        y = int((self.winfo_screenheight() - 380) / 2)
+        self.geometry(f"400x380+{x}+{y}")
+        self.resizable(False, False)
+        self.configure(fg_color="#080808")
+        self.attributes("-topmost", True)
+        
+        self.jar_name = None
+        self.jar_target = None
+        
+        # 1. Luxury Accent Banner
+        ctk.CTkFrame(self, fg_color=BRAND_ACCENT, height=4, corner_radius=0).pack(fill="x", side="top")
+        
+        # 2. Header
+        lbl = ctk.CTkLabel(self, text="LONG-TERM WEALTH", 
+                           font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"), 
+                           text_color=BRAND_ACCENT)
+        lbl.pack(pady=(30, 0))
+        
+        ctk.CTkLabel(self, text="Forge New Jar", 
+                     font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"), 
+                     text_color="white").pack(pady=(0, 20))
+        
+        # 3. Dual Input Form Matrix
+        self.name_entry = ctk.CTkEntry(self, placeholder_text="Jar Name (e.g. Vacation, PS5)", 
+                                       width=320, height=50, fg_color="#121212", 
+                                       border_width=0, corner_radius=12)
+        self.name_entry.pack(pady=10)
+        self.name_entry.focus() # Auto-focuses the name bar so you can type immediately
+        
+        self.target_entry = ctk.CTkEntry(self, placeholder_text="Target Amount (e.g. 150000)", 
+                                         width=320, height=50, fg_color="#121212", 
+                                         border_width=0, corner_radius=12)
+        self.target_entry.pack(pady=10)
+        
+        # 4. Action Button
+        btn = ctk.CTkButton(self, text="INITIALIZE JAR", height=55,
+                            fg_color="white", text_color="black", 
+                            hover_color="#e0e0e0", font=ctk.CTkFont(family="Segoe UI", weight="bold"), 
+                            command=self.submit)
+        btn.pack(pady=30, padx=40, fill="x")
+        
+        # Thread Hijack
+        self.wait_visibility()
+        self.grab_set()
+        self.focus_force()
+
+    def submit(self):
+        self.jar_name = self.name_entry.get().strip()
+        self.jar_target = self.target_entry.get().strip()
+        self.destroy()
+
+    def get_input(self):
+        """Halts main thread until OS modal is resolved."""
+        self.wait_window()
+        return self.jar_name, self.jar_target
+
 class ApexFinanceApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -307,7 +388,8 @@ class ApexFinanceApp(ctk.CTk):
             "vaults": True,
             "tasks": True,
             "telemetry": True,
-            "debt": True
+            "debt": True,
+            "savings": True
         }
         
         # Window
@@ -348,13 +430,17 @@ class ApexFinanceApp(ctk.CTk):
         # Row 5: Debt Ledger (NEW)
         self.btn_loans = ctk.CTkButton(self.sidebar, text="Debt Ledger", command=self.show_debt)
         self.btn_loans.grid(row=5, column=0, padx=20, pady=10)
+
+        # Row 6: Savings Jars (NEW)
+        self.btn_savings = ctk.CTkButton(self.sidebar, text="Savings Jars", command=self.show_savings)
+        self.btn_savings.grid(row=6, column=0, padx=20, pady=10)
         
-        self.sidebar.grid_rowconfigure(5, weight=0)
-        self.sidebar.grid_rowconfigure(6, weight=1) 
+        self.sidebar.grid_rowconfigure(6, weight=0)
+        self.sidebar.grid_rowconfigure(7, weight=1) 
         
         # Row 7: Settings Button
         self.btn_settings = ctk.CTkButton(self.sidebar, text="Settings", fg_color="#333333", hover_color="#444444", command=self.show_settings)
-        self.btn_settings.grid(row=7, column=0, padx=20, pady=(10, 20))
+        self.btn_settings.grid(row=8, column=0, padx=20, pady=(10, 20))
         
        # 1. The Main Content Area MUST be built first
         self.configure(fg_color=BG_MAIN)
@@ -369,7 +455,8 @@ class ApexFinanceApp(ctk.CTk):
         self.build_vault_frame()
         self.build_settings_frame()
         self.build_telemetry_frame()
-        self.build_debt_frame()       # <-- IT MUST GO EXACTLY HERE
+        self.build_debt_frame()
+        self.build_savings_frame()
         
         # 3. Boot into dashboard
         self.show_dashboard()
@@ -382,7 +469,8 @@ class ApexFinanceApp(ctk.CTk):
         self.vault_frame.grid_forget()
         self.settings_frame.grid_forget()
         self.telemetry_frame.grid_forget()
-        self.debt_frame.grid_forget() # NEW
+        self.debt_frame.grid_forget()
+        self.savings_frame.grid_forget()
 
     def show_debt(self):
         self.hide_all_frames()
@@ -1312,6 +1400,136 @@ class ApexFinanceApp(ctk.CTk):
             except ValueError:
                 pass
     
+    # ==========================================
+    # SAVINGS JAR: UI & EXECUTION MODULE
+    # ==========================================
+    def show_savings(self):
+        self.hide_all_frames()
+        self.savings_frame.grid(row=0, column=0, sticky="nsew")
+        if self.needs_refresh.get("savings", True):
+            self.refresh_savings_data()
+            self.needs_refresh["savings"] = False
+
+    def build_savings_frame(self):
+        """Constructs the long-term wealth tracker UI."""
+        self.savings_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        
+        # Header
+        header = ctk.CTkFrame(self.savings_frame, fg_color="transparent")
+        header.pack(fill="x", padx=40, pady=(30, 10))
+        
+        ctk.CTkLabel(header, text="LONG-TERM ACQUISITIONS", 
+                     font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), 
+                     text_color=TEXT_MUTED).pack(anchor="w")
+        
+        title_row = ctk.CTkFrame(header, fg_color="transparent")
+        title_row.pack(fill="x")
+        
+        ctk.CTkLabel(title_row, text="Savings Jars", 
+                     font=ctk.CTkFont(family="Segoe UI", size=32, weight="bold"), 
+                     text_color="white").pack(side="left")
+        
+        btn_new_jar = ctk.CTkButton(title_row, text="FORGE NEW JAR", 
+                                    fg_color="white", text_color="black", hover_color="#e0e0e0", height=40,
+                                    font=ctk.CTkFont(family="Segoe UI", weight="bold"),
+                                    command=self.trigger_create_jar)
+        btn_new_jar.pack(side="right")
+        
+        self.jar_scroll = ctk.CTkScrollableFrame(self.savings_frame, fg_color="transparent", scrollbar_button_color="#1a1a1a")
+        self.jar_scroll.pack(fill="both", expand=True, padx=30, pady=10)
+
+    def refresh_savings_data(self):
+        """Renders the Jars with dynamic progress bars."""
+        for widget in self.jar_scroll.winfo_children(): 
+            widget.destroy()
+            
+        jars = get_savings_jars()
+        
+        if not jars:
+            ctk.CTkLabel(self.jar_scroll, text="No active savings targets. Forge a new jar to begin.", 
+                         text_color=TEXT_MUTED, font=ctk.CTkFont(family="Segoe UI", slant="italic")).pack(pady=40)
+            return
+        
+        for jar_id, name, target, balance in jars:
+            card = ctk.CTkFrame(self.jar_scroll, fg_color=CARD_BG, corner_radius=15)
+            card.pack(fill="x", padx=15, pady=10)
+            
+            # Progress Math Math
+            percentage = (balance / target) if target > 0 else 0
+            display_pct = min(percentage * 100, 100)
+            
+            # Luxury Status Banner (Turns Gold when complete)
+            status_color = "#FFD700" if percentage >= 1.0 else BRAND_ACCENT
+            ctk.CTkFrame(card, fg_color=status_color, height=3, corner_radius=0).pack(fill="x", side="top")
+            
+            # Text Matrix
+            text_frame = ctk.CTkFrame(card, fg_color="transparent")
+            text_frame.pack(fill="x", padx=25, pady=(20, 10))
+            
+            ctk.CTkLabel(text_frame, text=name.upper(), font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color="white").pack(side="left")
+            ctk.CTkLabel(text_frame, text=f"{display_pct:.1f}%", font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"), text_color=status_color).pack(side="right")
+            
+            # Progress Bar
+            prog = ctk.CTkProgressBar(card, height=12, corner_radius=6, progress_color=status_color, fg_color="#1a1a1a")
+            prog.set(min(percentage, 1.0))
+            prog.pack(fill="x", padx=25, pady=(0, 15))
+            
+            # Bottom Row: Metrics & Actions
+            bot_frame = ctk.CTkFrame(card, fg_color="transparent")
+            bot_frame.pack(fill="x", padx=25, pady=(0, 20))
+            
+            ctk.CTkLabel(bot_frame, text=f"Saved: ₹{balance:,.2f}  /  Target: ₹{target:,.0f}", font=ctk.CTkFont(family="Segoe UI", size=13), text_color=TEXT_MUTED).pack(side="left")
+            
+            # Actions
+            ctk.CTkButton(bot_frame, text="Smash Jar", width=80, fg_color="transparent", text_color="#ff4444", hover_color="#331a1a", font=ctk.CTkFont(weight="bold"), command=lambda j=jar_id, n=name: self.trigger_smash_jar(j, n)).pack(side="right")
+            ctk.CTkButton(bot_frame, text="Inject Funds", width=100, fg_color="#252525", hover_color="#333333", font=ctk.CTkFont(weight="bold"), command=lambda j=jar_id, n=name: self.trigger_fund_jar(j, n)).pack(side="right", padx=10)
+
+    def trigger_create_jar(self):
+        """Bridge to spawn the dual-input modal and forge a jar."""
+        dialog = AddJarDialog()
+        raw_name, raw_target = dialog.get_input()
+
+        # Only proceed if the user actually typed something and didn't hit 'X'
+        if raw_name and raw_target:
+            try:
+                target_float = float(raw_target)
+                if target_float <= 0: 
+                    raise ValueError
+                
+                # Execute backend protocol
+                if create_savings_jar(raw_name, target_float):
+                    self.needs_refresh["savings"] = True
+                    self.refresh_savings_data()
+                    SystemMessageDialog("Jar Forged", f"Savings target for '{raw_name}' set at ₹{target_float:,.2f}.", BRAND_ACCENT)
+                else:
+                    SystemMessageDialog("Registry Error", "Failed to forge jar. Name may already exist.", "#ff4444")
+                    
+            except ValueError:
+                SystemMessageDialog("Input Error", "Target amount must be a valid, positive number.", "#ff4444")
+
+    def trigger_fund_jar(self, jar_id, jar_name):
+        """Bridge to add funds to a specific jar."""
+        def submit_funds(amount_str):
+            try:
+                amt = float(amount_str)
+                if fund_savings_jar(jar_id, amt):
+                    self.needs_refresh["savings"] = True
+                    self.refresh_savings_data()
+                    SystemMessageDialog("Funds Injected", f"₹{amt:,.2f} added to '{jar_name}'.", BRAND_ACCENT)
+            except ValueError:
+                SystemMessageDialog("Input Error", "Please enter a valid number.", "#ff4444")
+                
+        LuxuryInputDialog("INJECT FUNDS", f"Enter amount to deposit into {jar_name}:", submit_funds)
+
+    def trigger_smash_jar(self, jar_id, jar_name):
+        """Bridge to permanently delete a jar."""
+        confirm = CustomConfirmDialog("Smash Jar?", f"Are you sure you want to permanently delete the '{jar_name}' jar? This action cannot be reversed.")
+        if confirm.get_result():
+            if delete_savings_jar(jar_id):
+                self.needs_refresh["savings"] = True
+                self.refresh_savings_data()
+                SystemMessageDialog("Jar Smashed", f"'{jar_name}' has been deleted from the registry.", BRAND_ACCENT)
+
     def execute_export_report(self):
         """Bridge to generate the CSV report."""
         filepath = generate_transaction_ledger()

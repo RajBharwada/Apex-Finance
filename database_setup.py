@@ -71,6 +71,8 @@ def initialize_database():
     
     conn.close()
     print("System OS: Database architecture compiled and locked.")
+
+    
     
 if __name__ == "__main__":
     initialize_database()

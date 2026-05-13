@@ -6,10 +6,20 @@ from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeA
 from database_setup import initialize_database
 import csv
 from datetime import date
+import os
+import sys
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
-DB_PATH = Path("apex_finance.db")
+# SYSTEM PROTOCOL: Dynamic Path Resolution for Executables
+if getattr(sys, 'frozen', False):
+    # If running as a compiled executable, anchor to the .exe location
+    application_path = os.path.dirname(sys.executable)
+else:
+    # If running as a standard python script, anchor to the script location
+    application_path = os.path.dirname(os.path.abspath(__file__))
+
+DB_PATH = Path(application_path) / "apex_finance.db"
 
 def save_transaction(transaction: TransactionModel) -> bool:
     """Executes a secure, atomic write to the SQLite database."""
@@ -681,7 +691,7 @@ def export_data_to_csv():
         conn.close()
 
 def reset_database_registry():
-    """Executes a Nuclear Purge: Wipes data but PROTECTS default categories."""
+    """Executes a Nuclear Purge: Wipes data, PROTECTS defaults, and smashes all Jars."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
@@ -689,8 +699,10 @@ def reset_database_registry():
         cursor.execute("DELETE FROM Transactions")
         cursor.execute("DELETE FROM Tasks")
         
-        # 2. THE FIX: Protect the Default Categories
-        # Add the exact names of your default categories inside this tuple
+        # --- NEW: Purge the Long-Term Wealth Matrix ---
+        cursor.execute("DELETE FROM SavingsJars")
+        
+        # 2. Protect the Default Categories
         protected_defaults = ('Entertainment', 'Food', 'Master Pool', 'Miscellaneous', 'Travelling') 
         
         # Delete only categories that are NOT in the protected list
@@ -705,5 +717,76 @@ def reset_database_registry():
     except Exception as e:
         conn.rollback()
         raise e
+    finally:
+        conn.close()
+
+# ==========================================
+# SAVINGS JAR: BACKEND PROTOCOLS
+# ==========================================
+
+def init_savings_jars():
+    """Self-healing protocol to generate the Jars table if it doesn't exist."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS SavingsJars (
+            jar_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            current_balance REAL DEFAULT 0.0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Execute immediately when backend_db.py is imported to ensure table exists
+init_savings_jars()
+
+def get_savings_jars() -> list:
+    """Retrieves all active wealth-building jars from the matrix."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT jar_id, name, target_amount, current_balance FROM SavingsJars")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def create_savings_jar(name: str, target: float) -> bool:
+    """Forges a new jar entry into the ledger."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("INSERT INTO SavingsJars (name, target_amount) VALUES (?, ?)", (name, target))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"System Alert: Failed to forge jar - {e}")
+        return False
+    finally:
+        conn.close()
+
+def fund_savings_jar(jar_id: int, amount: float) -> bool:
+    """Injects funds into a specific jar."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("UPDATE SavingsJars SET current_balance = current_balance + ? WHERE jar_id = ?", (amount, jar_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"System Alert: Failed to fund jar - {e}")
+        return False
+    finally:
+        conn.close()
+
+def delete_savings_jar(jar_id: int) -> bool:
+    """Permanently smashes a jar and clears it from memory."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("DELETE FROM SavingsJars WHERE jar_id = ?", (jar_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"System Alert: Failed to smash jar - {e}")
+        return False
     finally:
         conn.close()
