@@ -4,6 +4,8 @@ from pathlib import Path
 import datetime
 from data_models import TransactionModel, LoanModel, LoanRepaymentModel, IncomeAllocationModel, TaskModel
 from database_setup import initialize_database
+import csv
+from datetime import date
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
@@ -182,22 +184,32 @@ def create_task(task: TaskModel) -> bool:
         conn.close()
         
 def complete_task(task_id: int) -> bool:
-    """Toggles the binary state of a task between True (1) and False (0)."""
+    """Toggles the binary state and reports the specific post-mutation status."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     try:
+        # 1. Execute the Binary Flip
+        # We use '1 - is_completed' as a mathematical XOR toggle
         cursor.execute('''
             UPDATE Tasks
-            SET is_completed = CASE WHEN is_completed = 1 THEN 0 ELSE 1 END
+            SET is_completed = 1 - is_completed
             WHERE task_id = ?
         ''', (task_id,))
         
         if cursor.rowcount == 0:
-            raise ValueError(f"Task ID {task_id} does not exist.")
+            raise ValueError(f"Task ID {task_id} not found in registry.")
+        
+        # 2. Fetch the new state for accurate System OS reporting
+        cursor.execute("SELECT is_completed FROM Tasks WHERE task_id = ?", (task_id,))
+        new_state = cursor.fetchone()[0]
         
         conn.commit()
-        print(f"System OS: Task ID {task_id} marked as COMPLETE.")
+        
+        # 3. Dynamic Status Feedback
+        status_label = "COMPLETE" if new_state == 1 else "INCOMPLETE"
+        print(f"System OS: Task ID {task_id} marked as {status_label}.")
+        
         return True
     
     except Exception as e:
@@ -639,5 +651,59 @@ def delete_task(task_id: int) -> bool:
         print(f"System Alert: Task deletion failed - {e}")
         conn.rollback()
         return False
+    finally:
+        conn.close()
+
+def export_data_to_csv():
+    """Compiles the Transaction Ledger into a flat CSV file for external use."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # Join Transactions with Envelopes to get the actual category name
+        cursor.execute("""
+            SELECT t.transaction_date, e.name, t.amount, t.note 
+            FROM Transactions t
+            JOIN Envelopes e ON t.envelope_id = e.envelope_id
+            ORDER BY t.transaction_date DESC
+        """)
+        rows = cursor.fetchall()
+        
+        # Generate a dynamic filename based on today's date
+        filename = f"apex_ledger_export_{date.today()}.csv"
+        
+        with open(filename, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Date', 'Category', 'Amount', 'Note']) # Headers
+            writer.writerows(rows)
+            
+        return filename
+    finally:
+        conn.close()
+
+def reset_database_registry():
+    """Executes a Nuclear Purge: Wipes data but PROTECTS default categories."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        # 1. Purge volatile ledgers
+        cursor.execute("DELETE FROM Transactions")
+        cursor.execute("DELETE FROM Tasks")
+        
+        # 2. THE FIX: Protect the Default Categories
+        # Add the exact names of your default categories inside this tuple
+        protected_defaults = ('Entertainment', 'Food', 'Master Pool', 'Miscellaneous', 'Travelling') 
+        
+        # Delete only categories that are NOT in the protected list
+        placeholders = ','.join('?' for _ in protected_defaults)
+        cursor.execute(f"DELETE FROM Envelopes WHERE name NOT IN ({placeholders})", protected_defaults)
+        
+        # 3. Reset the balances and limits of the surviving defaults to 0
+        cursor.execute("UPDATE Envelopes SET current_balance = 0.0, allocated_amount = 0.0")
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise e
     finally:
         conn.close()
