@@ -14,10 +14,10 @@ def seed_system_envelopes(cursor):
         VALUES (2, 'Miscellaneous', 0.0, 0.0)
     ''')
 
-def initialize_database():
+def initialize_database(target_db_path):
+    """System OS: Initializes the SQLite database with the required schema and seeds essential data."""
     
-    db_path = Path("apex_finance.db")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(target_db_path)
     cursor = conn.cursor()
     cursor.execute("PRAGMA foreign_keys = ON;")
 

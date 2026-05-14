@@ -496,7 +496,7 @@ def execute_factory_reset() -> bool:
         cursor.execute("DROP TABLE IF EXISTS Loans")
         conn.commit()
         
-        initialize_database()
+        initialize_database(DB_PATH)
         seed_default_categories()
         print("System OS: Factory reset completed. Matrix reinitialized.")
         return True
@@ -721,7 +721,7 @@ def reset_database_registry():
         conn.close()
 
 # ==========================================
-# SAVINGS JAR: BACKEND PROTOCOLS
+# MASTER BOOT & SAVINGS JAR PROTOCOLS
 # ==========================================
 
 def init_savings_jars():
@@ -739,8 +739,25 @@ def init_savings_jars():
     conn.commit()
     conn.close()
 
-# Execute immediately when backend_db.py is imported to ensure table exists
-init_savings_jars()
+def execute_system_boot():
+    """Master Boot Protocol: Eradicates startup race conditions."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. Probe for the Core Architecture (The Envelopes Table)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Envelopes'")
+    if not cursor.fetchone():
+        print("System OS: Core Matrix missing. Initializing foundational architecture...")
+        initialize_database(DB_PATH)
+        seed_default_categories()
+        
+    conn.close()
+    
+    # 2. Run the self-healing protocol for Jars AFTER the core is secured
+    init_savings_jars()
+
+# TRIGGER BOOT SEQUENCE (Must be the absolute last line of the file)
+execute_system_boot()
 
 def get_savings_jars() -> list:
     """Retrieves all active wealth-building jars from the matrix."""

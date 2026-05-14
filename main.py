@@ -1,6 +1,11 @@
 import customtkinter as ctk
 import sqlite3
+import matplotlib
+
+matplotlib.use("TkAgg")
+
 import matplotlib.pyplot as plt
+import re
 from datetime import date
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from backend_db import DB_PATH, save_transaction, distribute_income, get_recent_transactions, delete_transaction, create_task, complete_task, get_active_tasks, add_custom_envelope, delete_custom_envelope, execute_factory_reset, add_income_to_master, update_category_principal, execute_monthly_replenish, get_pie_chart_data, get_bar_chart_data, get_active_loans, create_loan, repay_loan, seed_default_categories, delete_task, export_data_to_csv, reset_database_registry, get_savings_jars, create_savings_jar, fund_savings_jar, delete_savings_jar
@@ -8,7 +13,7 @@ from database_setup import initialize_database
 from data_models import TransactionModel, IncomeAllocationModel, TaskModel, LoanRepaymentModel, LoanModel
 from report_generation import generate_transaction_ledger
 from analytical_engine import run_predictive_engine
-import re
+
 
 # UI Config
 ctk.set_default_color_theme("blue")
@@ -25,6 +30,7 @@ class CustomConfirmDialog(ctk.CTkToplevel):
     """A high-contrast luxury modal with expanded geometry to prevent clipping."""
     def __init__(self, title, message):
         super().__init__()
+        self.withdraw()
         self.title("System Decision")
         
         # PROTOCOL 1: Geometry Expansion
@@ -71,6 +77,7 @@ class CustomConfirmDialog(ctk.CTkToplevel):
                                     command=self.confirm_action)
         btn_confirm.pack(side="right", expand=True, padx=(10, 0))
         
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
         self.focus_force()
@@ -92,6 +99,7 @@ class AddIncomeDialog(ctk.CTkToplevel):
     """A dedicated luxury portal for Master Pool fund injections."""
     def __init__(self):
         super().__init__()
+        self.withdraw()
         self.title("Registry Update")
         self.update_idletasks()
         x = int((self.winfo_screenwidth() - 400) / 2)
@@ -135,6 +143,7 @@ class AddIncomeDialog(ctk.CTkToplevel):
                             command=self.submit)
         btn.pack(pady=30, padx=40, fill="x")
         
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
         self.focus_force()
@@ -150,6 +159,7 @@ class ForecastDialog(ctk.CTkToplevel):
     """A sleek, consumer-facing alert modal for predictive heuristics."""
     def __init__(self, report_text):
         super().__init__()
+        self.withdraw()
         self.title("Budget Alert")
         self.update_idletasks()
         x = int((self.winfo_screenwidth() - 450) / 2)
@@ -230,6 +240,7 @@ class ForecastDialog(ctk.CTkToplevel):
         btn = ctk.CTkButton(self, text="Got It", height=10, fg_color="#333333", hover_color="#444444", text_color="white", font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"), command=self.destroy)
         btn.pack(fill="x", padx=30, pady=(15, 20), ipady=10)
 
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
         self.focus_force()
@@ -239,6 +250,7 @@ class SystemMessageDialog(ctk.CTkToplevel):
     """A luxury-themed universal feedback modal for errors, warnings, and alerts."""
     def __init__(self, title, message, color="#0A84FF"):
         super().__init__()
+        self.withdraw()
         self.title("System Notification")
         # Replace self.geometry("400x260") with:
         self.update_idletasks()
@@ -256,6 +268,7 @@ class SystemMessageDialog(ctk.CTkToplevel):
         btn = ctk.CTkButton(self, text="ACKNOWLEDGE", height=45, fg_color="#1a1a1a", hover_color="#252525", text_color="white", font=ctk.CTkFont(family="Segoe UI", weight="bold"), command=self.destroy)
         btn.pack(side="bottom", pady=25, padx=40, fill="x")
 
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
         self.focus_force()
@@ -264,6 +277,7 @@ class LuxuryInputDialog(ctk.CTkToplevel):
     """A sleek, high-contrast modal designed specifically for capturing user input."""
     def __init__(self, title, prompt, on_submit):
         super().__init__()
+        self.withdraw()
         self.title("System Request")
         # Replace self.geometry("400x280") with:
         self.update_idletasks()
@@ -305,6 +319,7 @@ class LuxuryInputDialog(ctk.CTkToplevel):
         btn.pack(fill="x", padx=40, pady=20)
 
         # OS Thread Hijack
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
 
@@ -364,6 +379,7 @@ class AddJarDialog(ctk.CTkToplevel):
         btn.pack(pady=30, padx=40, fill="x")
         
         # Thread Hijack
+        self.deiconify()
         self.wait_visibility()
         self.grab_set()
         self.focus_force()
@@ -394,6 +410,26 @@ class ApexFinanceApp(ctk.CTk):
         
         # Window
         self.title("Apex Finance OS")
+        try:
+            self.state('zoomed')  # Windows execution
+        except Exception:
+            self.attributes('-zoomed', True)  # Linux execution
+            
+        # --- SYSTEM PROTOCOL: App Icon Injection ---
+        # Note: Place your 'icon.ico' file in the same folder as main.py
+        import os
+        import sys
+        if getattr(sys, 'frozen', False):
+            application_path = os.path.dirname(sys.executable)
+        else:
+            application_path = os.path.dirname(os.path.abspath(__file__))
+            
+        icon_path = os.path.join(application_path, "icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(icon_path)
+            except Exception:
+                pass
         self.geometry("1000x600")
         self.minsize(800, 500)
         
@@ -1169,59 +1205,60 @@ class ApexFinanceApp(ctk.CTk):
             
         current_view = self.chart_view_var.get()
         
-        # Create a single, massive Matplotlib Figure
-        fig, ax = plt.subplots(figsize=(8, 5), facecolor="#1e1e1e")
-        ax.set_facecolor("#1e1e1e")
-        colors = ['#0A84FF', '#ff4444', '#ffcc00', '#cc33ff', '#3399ff', '#ff3399']
+        try:
+            # Create a single, massive Matplotlib Figure
+            fig, ax = plt.subplots(figsize=(8, 5), facecolor="#1e1e1e")
+            ax.set_facecolor("#1e1e1e")
+            colors = ['#0A84FF', '#ff4444', '#ffcc00', '#cc33ff', '#3399ff', '#ff3399']
 
-        if "Donut" in current_view:
-            # --- MONTHLY DONUT LOGIC ---
-            data = get_pie_chart_data()
-            ax.set_title("Current Calendar Month Burn", color="white", weight="bold", pad=20)
-            
-            if data:
-                wedges, texts, autotexts = ax.pie(
-                    list(data.values()), labels=list(data.keys()), autopct='%1.1f%%', 
-                    startangle=90, pctdistance=0.75, colors=colors,
-                    textprops={'color': "white", 'weight': 'bold'},
-                    wedgeprops={'edgecolor': '#1e1e1e', 'linewidth': 2, 'width': 0.4} 
-                )
-                plt.setp(texts, size=12)
-                plt.setp(autotexts, size=10, weight="bold", color="black")
-                ax.axis('equal')
+            if "Donut" in current_view:
+                data = get_pie_chart_data()
+                ax.set_title("Current Calendar Month Burn", color="white", weight="bold", pad=20)
+                
+                if data:
+                    wedges, texts, autotexts = ax.pie(
+                        list(data.values()), labels=list(data.keys()), autopct='%1.1f%%', 
+                        startangle=90, pctdistance=0.75, colors=colors,
+                        textprops={'color': "white", 'weight': 'bold'},
+                        wedgeprops={'edgecolor': '#1e1e1e', 'linewidth': 2, 'width': 0.4} 
+                    )
+                    plt.setp(texts, size=12)
+                    plt.setp(autotexts, size=10, weight="bold", color="black")
+                    ax.axis('equal')
+                else:
+                    ax.text(0.5, 0.5, 'No expenses logged this month.', color='white', ha='center', va='center', size=14)
+                    
             else:
-                ax.text(0.5, 0.5, 'No expenses logged this month.', color='white', ha='center', va='center', size=14)
+                data = get_bar_chart_data()
+                ax.set_title("Year-to-Date Burn Rate", color="white", weight="bold", pad=20)
                 
-        else:
-            # --- YEARLY BAR GRAPH LOGIC ---
-            data = get_bar_chart_data()
-            ax.set_title("Year-to-Date Burn Rate", color="white", weight="bold", pad=20)
-            
-            months = list(data.keys())
-            totals = list(data.values())
-            
-            # Matplotlib auto-scales the Y-axis based on the highest total
-            bars = ax.bar(months, totals, color="#0A84FF", edgecolor="#0066CC", width=0.6)
-            
-            # Styling the grid
-            ax.tick_params(colors='white', labelsize=10)
-            for spine in ax.spines.values():
-                spine.set_color('#333333')
+                months = list(data.keys())
+                totals = list(data.values())
                 
-            # Add dollar amounts hovering over the bars (only if > 0)
-            for bar in bars:
-                yval = bar.get_height()
-                if yval > 0:
-                    offset = max(totals) * 0.02 if max(totals) > 0 else 1
-                    ax.text(bar.get_x() + bar.get_width()/2, yval + offset, f'₹{yval:,.0f}', ha='center', va='bottom', color='white', size=10, weight='bold')
+                bars = ax.bar(months, totals, color="#0A84FF", edgecolor="#0066CC", width=0.6)
+                
+                ax.tick_params(colors='white', labelsize=10)
+                for spine in ax.spines.values():
+                    spine.set_color('#333333')
+                    
+                for bar in bars:
+                    yval = bar.get_height()
+                    if yval > 0:
+                        offset = max(totals) * 0.02 if max(totals) > 0 else 1
+                        ax.text(bar.get_x() + bar.get_width()/2, yval + offset, f'₹{yval:,.0f}', ha='center', va='bottom', color='white', size=10, weight='bold')
 
-        plt.tight_layout()
-        
-        # Render to UI
-        canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=20)
-        plt.close(fig)
+            plt.tight_layout()
+            
+            # Render to UI
+            canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=20)
+            
+            # Matplotlib cleanup to prevent memory leaks
+            plt.close(fig)
+            
+        except Exception as e:
+            SystemMessageDialog("Telemetry Failure", f"Graph engine crashed:\n{e}", "#ff4444")
         
     def build_debt_frame(self):
         """Constructs the Luxury IOU Matrix with Pixel-Perfect Alignment."""
@@ -1388,17 +1425,27 @@ class ApexFinanceApp(ctk.CTk):
 
     # --- EXECUTION BRIDGES ---
     def trigger_repayment(self, loan_id, name, current_balance):
-        dialog = ctk.CTkInputDialog(text=f"Enter payment amount for {name} (Max: ₹{current_balance:,.2f}):", title="Process Repayment")
-        result = dialog.get_input()
+        """Execution bridge utilizing the Luxury Input Matrix for debt repayment."""
         
-        if result:
+        def submit_payment(val):
             try:
-                amt = float(result)
+                amt = float(val)
                 repay_payload = LoanRepaymentModel(loan_id=loan_id, amount=amt)
+                
                 if repay_loan(repay_payload):
+                    self.needs_refresh["debt"] = True
                     self.refresh_debt_data()
-            except ValueError:
-                pass
+                    SystemMessageDialog("Registry Updated", f"Repayment of ₹{amt:,.2f} logged for {name}.", BRAND_ACCENT)
+            except ValueError as e:
+                # Catches both non-numeric input and the over-pay integrity error
+                SystemMessageDialog("Input Error", str(e) if "Integrity" in str(e) else "Please enter a valid numeric amount.", "#ff4444")
+                
+        # Summon the Centered Luxury Modal
+        LuxuryInputDialog(
+            "PROCESS REPAYMENT", 
+            f"Enter payment amount for {name}\n(Max: ₹{current_balance:,.2f}):", 
+            submit_payment
+        )
     
     # ==========================================
     # SAVINGS JAR: UI & EXECUTION MODULE
@@ -1577,11 +1624,5 @@ class ApexFinanceApp(ctk.CTk):
                 SystemMessageDialog("Purge Failed", f"Database lock or execution error: {e}", "#ff4444")
 
 if __name__ == "__main__":
-    # The First Boot Protocol
-    if not DB_PATH.exists():
-        print("System OS: First boot detected. Building matrix architecture...")
-        initialize_database()
-        seed_default_categories()
-        
     app = ApexFinanceApp()
     app.mainloop()
