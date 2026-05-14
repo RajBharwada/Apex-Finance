@@ -8,18 +8,24 @@ import csv
 from datetime import date
 import os
 import sys
+import platform
 
 sqlite3.register_adapter(datetime.date, lambda val: val.isoformat())
 
-# SYSTEM PROTOCOL: Dynamic Path Resolution for Executables
-if getattr(sys, 'frozen', False):
-    # If running as a compiled executable, anchor to the .exe location
-    application_path = os.path.dirname(sys.executable)
-else:
-    # If running as a standard python script, anchor to the script location
-    application_path = os.path.dirname(os.path.abspath(__file__))
+# SYSTEM PROTOCOL: Enterprise Data Pathing
+app_name = "ApexFinanceOS"
 
-DB_PATH = Path(application_path) / "apex_finance.db"
+if platform.system() == "Windows":
+    # On Windows, strictly route databases to the user's AppData/Roaming folder
+    app_data_dir = Path(os.getenv('APPDATA')) / app_name
+else:
+    # On Linux/Mac, route to the standard hidden home directory
+    app_data_dir = Path.home() / f".{app_name.lower()}"
+
+# Create the directory silently if it doesn't exist
+app_data_dir.mkdir(parents=True, exist_ok=True)
+
+DB_PATH = app_data_dir / "apex_finance.db"
 
 def save_transaction(transaction: TransactionModel) -> bool:
     """Executes a secure, atomic write to the SQLite database."""

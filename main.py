@@ -410,10 +410,6 @@ class ApexFinanceApp(ctk.CTk):
         
         # Window
         self.title("Apex Finance OS")
-        try:
-            self.state('zoomed')  # Windows execution
-        except Exception:
-            self.attributes('-zoomed', True)  # Linux execution
             
         # --- SYSTEM PROTOCOL: App Icon Injection ---
         # Note: Place your 'icon.ico' file in the same folder as main.py
@@ -496,6 +492,9 @@ class ApexFinanceApp(ctk.CTk):
         
         # 3. Boot into dashboard
         self.show_dashboard()
+        
+        # Wait 100 milliseconds for CustomTkinter to finish calculating geometry, then maximize.
+        self.after(100, self.force_maximize)
         
     # --- UI Routing Methods ---
     def hide_all_frames(self):
@@ -1622,6 +1621,13 @@ class ApexFinanceApp(ctk.CTk):
                 SystemMessageDialog("System Purged", "Registry has been wiped. Operating System rebooted to default state.", "#ff4444")
             except Exception as e:
                 SystemMessageDialog("Purge Failed", f"Database lock or execution error: {e}", "#ff4444")
+
+    def force_maximize(self):
+        """Forces the OS to maximize the window only after the UI is fully drawn."""
+        try:
+            self.state('zoomed')
+        except Exception:
+            self.attributes('-zoomed', True)
 
 if __name__ == "__main__":
     app = ApexFinanceApp()
